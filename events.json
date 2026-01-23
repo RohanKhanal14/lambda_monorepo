@@ -1,0 +1,20 @@
+{
+  "lambda1_get_event": {
+    "httpMethod": "GET",
+    "path": "/lambda1",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": null,
+    "isBase64Encoded": false
+  },
+  "lambda2_get_event": {
+    "httpMethod": "GET",
+    "path": "/lambda2",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": null,
+    "isBase64Encoded": false
+  }
+}

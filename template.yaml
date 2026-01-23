@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM Template for Lambda Monorepo
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 128
+    Runtime: python3.12
+    Environment:
+      Variables:
+        LOG_LEVEL: INFO
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Environment name
+
+Resources:
+  Lambda1Function:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-lambda1'
+      Handler: app.lambda_handler
+      CodeUri: lambda1/
+      Description: Lambda 1 Function
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        Lambda1ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /lambda1
+            Method: GET
+      Layers:
+        - !Ref SharedUtilitiesLayer
+
+  Lambda2Function:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-lambda2'
+      Handler: app.lambda_handler
+      CodeUri: lambda2/
+      Description: Lambda 2 Function
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Events:
+        Lambda2ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /lambda2
+            Method: GET
+      Layers:
+        - !Ref SharedUtilitiesLayer
+
+  SharedUtilitiesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub '${AWS::StackName}-shared-utilities'
+      Description: Shared utilities and logger
+      ContentUri: layers/shared/
+      CompatibleRuntimes:
+        - python3.11
+        - python3.10
+        - python3.9
+        - python3.8
+
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-api'
+      StageName: !Ref Environment
+      TracingEnabled: true
+      MethodSettings:
+        - ResourcePath: '/**'
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          DataTraceEnabled: true
+
+Outputs:
+  Lambda1FunctionArn:
+    Description: ARN of Lambda 1 Function
+    Value: !GetAtt Lambda1Function.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-Lambda1Arn'
+
+  Lambda2FunctionArn:
+    Description: ARN of Lambda 2 Function
+    Value: !GetAtt Lambda2Function.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-Lambda2Arn'
+
+  ApiEndpoint:
+    Description: API Gateway endpoint
+    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiEndpoint'
+
+  Lambda1InvokeUrl:
+    Description: URL to invoke Lambda 1
+    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/lambda1'
+
+  Lambda2InvokeUrl:
+    Description: URL to invoke Lambda 2
+    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/lambda2'

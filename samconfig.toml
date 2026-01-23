@@ -1,0 +1,21 @@
+version = 0.1
+
+[default]
+region = "us-east-1"
+stack_name = "lambda-monorepo-stack"
+
+[default.parameters]
+Environment = "dev"
+
+[default.build]
+watch_exclude = [".git", ".gitignore", ".venv", "__pycache__", ".pytest_cache"]
+
+[default.local_start_api]
+host = "127.0.0.1"
+port = 3000
+warm_containers = "EAGER"
+container_mode = "HOST"
+debug = false
+debug_port = 5858
+debugger_path = "/tmp/lambci_debug_files"
+docker_network = "sam-network"
