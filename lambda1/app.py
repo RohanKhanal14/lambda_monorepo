@@ -10,7 +10,7 @@ def lambda_handler(event, context):
     return {
         'statusCode': 200,
         'body': json.dumps({
-            'message': 'Hello from Lambda 5!',
+            'message': 'Hello from test for webhook!',
             'lambda': 'lambda1'
         })
     }
