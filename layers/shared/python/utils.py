@@ -5,7 +5,7 @@ def get_timestamp():
     return datetime.utcnow().isoformat()
 
 def format_response(status_code, body):
-    """Format standard API Gateway response"""
+    """Format standard API Gateway response wow"""
     return {
         'statusCode': status_code,
         'headers': {
