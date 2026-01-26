@@ -13,7 +13,6 @@ def get_logger(name):
         handler = logging.StreamHandler()
         formatter = logging.Formatter(
             json.dumps({
-                'timestamp': '%(asctime)s',
                 'name': '%(name)s',
                 'level': '%(levelname)s',
                 'message': '%(message)s'
