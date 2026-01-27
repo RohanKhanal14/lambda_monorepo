@@ -171,8 +171,11 @@ Resources:
                 Action:
                   - 'cloudformation:CreateChangeSet'
                   - 'cloudformation:DescribeChangeSet'
+                  - 'cloudformation:ExecuteChangeSet'
+                  - 'cloudformation:DeleteChangeSet'
                 Resource:
-                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:aws:transform/Serverless-2010-05-13'
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/*'
+                  - 'arn:aws:cloudformation:*:aws:transform/Serverless-2010-05-13'
 
               # ===== IAM PassRole (Required for CloudFormation to assume other roles) =====
               - Sid: IAMPassRole
