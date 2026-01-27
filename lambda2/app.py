@@ -10,7 +10,7 @@ def lambda_handler(event, context):
     return {
         'statusCode': 200,
         'body': json.dumps({
-            'message': 'Hello from Lambda multi test!',
+            'message': 'Hello from Lambda multi test! router lambda triggure test',
             'lambda': 'lambda2'
         })
     }
