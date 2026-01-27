@@ -15,7 +15,7 @@ phases:
 
   build:
     commands:
-      - sam build --use-container --template-file template.yaml
+      - sam build --use-container --template-file lambda1/template.yaml
       - sam package
         --template-file .aws-sam/build/template.yaml
         --s3-bucket $S3_BUCKET
