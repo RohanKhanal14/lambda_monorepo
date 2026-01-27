@@ -135,6 +135,7 @@ Resources:
   CloudFormationRole:
     Type: AWS::IAM::Role
     Properties:
+      RoleName: lambda-monorepo-cloudformation-role
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -142,8 +143,115 @@ Resources:
             Principal:
               Service: cloudformation.amazonaws.com
             Action: 'sts:AssumeRole'
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/AdministratorAccess'
+      Policies:
+        - PolicyName: CloudFormationSAMDeployment
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # ===== CloudFormation Stack Operations =====
+              - Sid: CloudFormationStackOps
+                Effect: Allow
+                Action:
+                  - 'cloudformation:CreateChangeSet'
+                  - 'cloudformation:DescribeChangeSet'
+                  - 'cloudformation:ExecuteChangeSet'
+                  - 'cloudformation:DeleteChangeSet'
+                  - 'cloudformation:DescribeStacks'
+                  - 'cloudformation:CreateStack'
+                  - 'cloudformation:UpdateStack'
+                  - 'cloudformation:DeleteStack'
+                  - 'cloudformation:GetTemplate'
+                  - 'cloudformation:ListStackResources'
+                Resource: 
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/*'
+
+              # ===== SAM Transform Support =====
+              - Sid: SAMTransform
+                Effect: Allow
+                Action:
+                  - 'cloudformation:CreateChangeSet'
+                  - 'cloudformation:DescribeChangeSet'
+                Resource:
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:aws:transform/Serverless-2010-05-13'
+
+              # ===== IAM PassRole (Required for CloudFormation to assume other roles) =====
+              - Sid: IAMPassRole
+                Effect: Allow
+                Action:
+                  - 'iam:PassRole'
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    'iam:PassedToService':
+                      - 'lambda.amazonaws.com'
+                      - 'apigateway.amazonaws.com'
+
+              # ===== Lambda Operations =====
+              - Sid: LambdaOperations
+                Effect: Allow
+                Action:
+                  - 'lambda:CreateFunction'
+                  - 'lambda:DeleteFunction'
+                  - 'lambda:UpdateFunction'
+                  - 'lambda:UpdateFunctionCode'
+                  - 'lambda:UpdateFunctionConfiguration'
+                  - 'lambda:AddPermission'
+                  - 'lambda:RemovePermission'
+                  - 'lambda:GetFunction'
+                  - 'lambda:GetFunctionConfiguration'
+                  - 'lambda:PublishVersion'
+                  - 'lambda:CreateAlias'
+                  - 'lambda:UpdateAlias'
+                  - 'lambda:DeleteAlias'
+                  - 'lambda:ListFunctions'
+                  - 'lambda:TagResource'
+                  - 'lambda:UntagResource'
+                  - 'lambda:ListLayerVersions'
+                  - 'lambda:PublishLayerVersion'
+                  - 'lambda:DeleteLayerVersion'
+                Resource: 
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:lambda*'
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:*'
+
+              # ===== CloudWatch Logs =====
+              - Sid: CloudWatchLogsOps
+                Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:DeleteLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:DeleteLogStream'
+                  - 'logs:PutRetentionPolicy'
+                  - 'logs:TagLogGroup'
+                  - 'logs:UntagLogGroup'
+                Resource:
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
+
+              # ===== S3 Artifact Bucket Access =====
+              - Sid: S3ArtifactAccess
+                Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:GetObjectVersion'
+                  - 's3:PutObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Sub '${ArtifactBucket.Arn}/*'
+
+              # ===== API Gateway (Optional - if Lambda needs API) =====
+              - Sid: APIGatewayOps
+                Effect: Allow
+                Action:
+                  - 'apigateway:*'
+                Resource: '*'
+
+              # ===== CodeStar Connections (for GitHub) =====
+              - Sid: CodeStarConnections
+                Effect: Allow
+                Action:
+                  - 'codestar-connections:UseConnection'
+                Resource: !Sub 'arn:aws:codestar-connections:${AWS::Region}:${AWS::AccountId}:connection/*'
 
   CodeBuildRole:
     Type: AWS::IAM::Role
