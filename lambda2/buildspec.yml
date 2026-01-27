@@ -1,0 +1,41 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - echo "Installing SAM CLI..."
+      - pip install --upgrade pip
+      - pip install aws-sam-cli
+      - pip install aws-cdk-lib
+      - echo "SAM version:"
+      - sam --version
+
+  pre_build:
+    commands:
+      - echo "Running pre-build checks..."
+      - echo "Building Lambda 2..."
+      - cd lambda2
+      - python -m pip install -r requirements.txt -t package/
+      - cd ..
+
+  build:
+    commands:
+      - echo "Building SAM template for Lambda 2..."
+      - sam build --use-container --template template.yaml
+      - echo "Packaging SAM template..."
+      - sam package --output-template-file packaged.yaml --s3-bucket $S3_BUCKET --region ${AWS_REGION}
+
+  post_build:
+    commands:
+      - echo "Build completed successfully"
+
+artifacts:
+  files:
+    - packaged.yaml
+  discard-paths: yes
+
+cache:
+  paths:
+    - '/root/.cache/pip/**/*'

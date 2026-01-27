@@ -1,112 +1,399 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Transform: AWS::Serverless-2016-10-31
-Description: SAM Template for Lambda Monorepo
+Transform: AWS::Serverless-2010-05-13
+Description: 'Monorepo Lambda Functions with CodePipelines'
 
 Globals:
   Function:
     Timeout: 30
-    MemorySize: 128
-    Runtime: python3.12
+    Runtime: python3.11
     Environment:
       Variables:
         LOG_LEVEL: INFO
 
-Parameters:
-  Environment:
-    Type: String
-    Default: dev
-    AllowedValues:
-      - dev
-      - staging
-      - prod
-    Description: Environment name
-
 Resources:
+  # ==================== SHARED LAYER ====================
+  SharedLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: lambda-shared-layer
+      ContentUri: layers/shared
+      CompatibleRuntimes:
+        - python3.11
+      RetentionPolicy: Delete
+
+  # ==================== LAMBDA 1 ====================
   Lambda1Function:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-lambda1'
-      Handler: app.lambda_handler
+      FunctionName: lambda1
       CodeUri: lambda1/
-      Description: Lambda 1 Function
-      Policies:
-        - AWSLambdaBasicExecutionRole
-      Events:
-        Lambda1ApiEvent:
-          Type: Api
-          Properties:
-            RestApiId: !Ref ApiGateway
-            Path: /lambda1
-            Method: GET
+      Handler: app.lambda_handler
       Layers:
-        - !Ref SharedUtilitiesLayer
+        - !Ref SharedLayer
+      Runtime: python3.11
+      Timeout: 30
 
+  Lambda1LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${Lambda1Function}'
+      RetentionInDays: 7
+
+  # ==================== LAMBDA 2 ====================
   Lambda2Function:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-lambda2'
-      Handler: app.lambda_handler
+      FunctionName: lambda2
       CodeUri: lambda2/
-      Description: Lambda 2 Function
-      Policies:
-        - AWSLambdaBasicExecutionRole
-      Events:
-        Lambda2ApiEvent:
-          Type: Api
-          Properties:
-            RestApiId: !Ref ApiGateway
-            Path: /lambda2
-            Method: GET
+      Handler: app.lambda_handler
       Layers:
-        - !Ref SharedUtilitiesLayer
+        - !Ref SharedLayer
+      Runtime: python3.11
+      Timeout: 30
 
-  SharedUtilitiesLayer:
-    Type: AWS::Serverless::LayerVersion
+  Lambda2LogGroup:
+    Type: AWS::Logs::LogGroup
     Properties:
-      LayerName: !Sub '${AWS::StackName}-shared-utilities'
-      Description: Shared utilities and logger
-      ContentUri: layers/shared/
-      CompatibleRuntimes:
-        - python3.11
-        - python3.10
-        - python3.9
-        - python3.8
+      LogGroupName: !Sub '/aws/lambda/${Lambda2Function}'
+      RetentionInDays: 7
 
-  ApiGateway:
-    Type: AWS::Serverless::Api
+  # ==================== ARTIFACT BUCKET ====================
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
     Properties:
-      Name: !Sub '${AWS::StackName}-api'
-      StageName: !Ref Environment
-      TracingEnabled: true
-      MethodSettings:
-        - ResourcePath: '/**'
-          HttpMethod: '*'
-          LoggingLevel: INFO
-          DataTraceEnabled: true
+      BucketName: !Sub 'lambda-monorepo-artifacts-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldArtifacts
+            Status: Enabled
+            ExpirationInDays: 30
+            NoncurrentVersionExpirationInDays: 7
+
+  # ==================== IAM ROLES ====================
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AWSCodePipelineFullAccess'
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:GetObjectVersion'
+                  - 's3:PutObject'
+                  - 's3:GetBucketVersioning'
+                Resource:
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Sub '${ArtifactBucket.Arn}/*'
+        - PolicyName: CodeBuildAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'codebuild:BatchGetBuilds'
+                  - 'codebuild:BatchGetProjects'
+                  - 'codebuild:BatchGetReports'
+                  - 'codebuild:BatchGetReportGroups'
+                  - 'codebuild:CreateReport'
+                  - 'codebuild:CreateReportGroup'
+                  - 'codebuild:UpdateReport'
+                  - 'codebuild:UpdateReportGroup'
+                  - 'codebuild:StartBuild'
+                Resource: '*'
+        - PolicyName: CloudFormationAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'cloudformation:*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'iam:PassRole'
+                Resource: !GetAtt CloudFormationRole.Arn
+
+  CloudFormationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AdministratorAccess'
+
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess'
+      Policies:
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*'
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:GetObjectVersion'
+                  - 's3:PutObject'
+                Resource:
+                  - !Sub '${ArtifactBucket.Arn}/*'
+
+  # ==================== CODEBUILD PROJECTS ====================
+  Lambda1BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: lambda1-build
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: S3_BUCKET
+            Value: !Ref ArtifactBucket
+          - Name: LAMBDA_NAME
+            Value: lambda1
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: lambda1/buildspec.yml
+
+  Lambda2BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: lambda2-build
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: S3_BUCKET
+            Value: !Ref ArtifactBucket
+          - Name: LAMBDA_NAME
+            Value: lambda2
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: lambda2/buildspec.yml
+
+  # ==================== CODEPIPELINE FOR LAMBDA 1 ====================
+  Lambda1Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: lambda1-pipeline
+      RoleArn: !GetAtt CodePipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: '1'
+              Configuration:
+                FullRepositoryId: !Sub 'RohanKhanal14/lambda_monorepo'
+                BranchName: main
+                ConnectionArn: !Sub 'arn:aws:codestar-connections:${AWS::Region}:${AWS::AccountId}:connection/YOUR_CONNECTION_ID'
+              OutputArtifacts:
+                - Name: SourceOutput
+              RunOrder: 1
+
+        - Name: Build
+          Actions:
+            - Name: BuildAction
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref Lambda1BuildProject
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
+              RunOrder: 1
+
+        - Name: Deploy
+          Actions:
+            - Name: CreateChangeSet
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              Configuration:
+                ActionMode: CHANGE_SET_REPLACE
+                StackName: lambda1-stack
+                ChangeSetName: lambda1-changeset
+                TemplatePath: BuildOutput::packaged.yaml
+                Capabilities: CAPABILITY_IAM,CAPABILITY_AUTO_EXPAND
+                RoleArn: !GetAtt CloudFormationRole.Arn
+              InputArtifacts:
+                - Name: BuildOutput
+              RunOrder: 1
+
+            - Name: ExecuteChangeSet
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              Configuration:
+                ActionMode: CHANGE_SET_EXECUTE
+                StackName: lambda1-stack
+                ChangeSetName: lambda1-changeset
+              RunOrder: 2
+
+  # ==================== CODEPIPELINE FOR LAMBDA 2 ====================
+  Lambda2Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: lambda2-pipeline
+      RoleArn: !GetAtt CodePipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: '1'
+              Configuration:
+                FullRepositoryId: !Sub 'RohanKhanal14/lambda_monorepo'
+                BranchName: main
+                ConnectionArn: !Sub 'arn:aws:codestar-connections:${AWS::Region}:${AWS::AccountId}:connection/YOUR_CONNECTION_ID'
+              OutputArtifacts:
+                - Name: SourceOutput
+              RunOrder: 1
+
+        - Name: Build
+          Actions:
+            - Name: BuildAction
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref Lambda2BuildProject
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
+              RunOrder: 1
+
+        - Name: Deploy
+          Actions:
+            - Name: CreateChangeSet
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              Configuration:
+                ActionMode: CHANGE_SET_REPLACE
+                StackName: lambda2-stack
+                ChangeSetName: lambda2-changeset
+                TemplatePath: BuildOutput::packaged.yaml
+                Capabilities: CAPABILITY_IAM,CAPABILITY_AUTO_EXPAND
+                RoleArn: !GetAtt CloudFormationRole.Arn
+              InputArtifacts:
+                - Name: BuildOutput
+              RunOrder: 1
+
+            - Name: ExecuteChangeSet
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              Configuration:
+                ActionMode: CHANGE_SET_EXECUTE
+                StackName: lambda2-stack
+                ChangeSetName: lambda2-changeset
+              RunOrder: 2
 
 Outputs:
   Lambda1FunctionArn:
     Description: ARN of Lambda 1 Function
     Value: !GetAtt Lambda1Function.Arn
     Export:
-      Name: !Sub '${AWS::StackName}-Lambda1Arn'
+      Name: Lambda1FunctionArn
 
   Lambda2FunctionArn:
     Description: ARN of Lambda 2 Function
     Value: !GetAtt Lambda2Function.Arn
     Export:
-      Name: !Sub '${AWS::StackName}-Lambda2Arn'
+      Name: Lambda2FunctionArn
 
-  ApiEndpoint:
-    Description: API Gateway endpoint
-    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+  SharedLayerArn:
+    Description: ARN of Shared Layer
+    Value: !Ref SharedLayer
     Export:
-      Name: !Sub '${AWS::StackName}-ApiEndpoint'
+      Name: SharedLayerArn
 
-  Lambda1InvokeUrl:
-    Description: URL to invoke Lambda 1
-    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/lambda1'
+  ArtifactBucketName:
+    Description: S3 Bucket for Pipeline Artifacts
+    Value: !Ref ArtifactBucket
 
-  Lambda2InvokeUrl:
-    Description: URL to invoke Lambda 2
-    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/lambda2'
+  Lambda1PipelineName:
+    Description: Lambda 1 CodePipeline Name
+    Value: !Ref Lambda1Pipeline
+
+  Lambda2PipelineName:
+    Description: Lambda 2 CodePipeline Name
+    Value: !Ref Lambda2Pipeline

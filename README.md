@@ -1,188 +1,246 @@
-# Lambda Monorepo - SAM Deployment Guide
+# Lambda Monorepo - CodePipeline Deployment
 
-This is a monorepo containing two AWS Lambda functions with shared utilities, deployable using AWS SAM (Serverless Application Model).
+A production-ready AWS Lambda monorepo with automated CodePipeline deployments triggered by GitHub pushes, using AWS SAM and best practices.
 
-## Project Structure
-
-```
-lambda_monorepo/
-├── template.yaml           # SAM template for deployment
-├── samconfig.toml          # SAM configuration for local testing
-├── events.json             # Test events for local invocation
-├── lambda1/
-│   ├── app.py             # Lambda 1 function handler
-│   └── requirements.txt    # Lambda 1 dependencies
-├── lambda2/
-│   ├── app.py             # Lambda 2 function handler
-│   └── requirements.txt    # Lambda 2 dependencies
-└── shared/
-    ├── logger.py          # Shared logger utility
-    └── utils.py           # Other shared utilities
-```
-
-## Prerequisites
-
-- AWS SAM CLI installed: `pip install aws-sam-cli`
-- Docker installed (required for local testing)
-- AWS CLI configured with credentials
-- Python 3.11 or higher
-
-## Installation
+## 📋 Quick Start
 
 ```bash
-# Install SAM CLI
-pip install aws-sam-cli
+# 1. Make deployment script executable
+chmod +x deploy.sh
 
-# Install Docker (if not already installed)
-# Follow https://docs.docker.com/get-docker/
+# 2. Run automated deployment
+./deploy.sh
+
+# 3. Add GitHub webhook (see output from deploy.sh)
 ```
 
-## Local Testing
+For detailed instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
-### 1. Build the SAM Application
+## 🏗️ Architecture
 
-```bash
-sam build
+- **Lambda Functions**: lambda1 and lambda2 with shared layer
+- **CodePipeline**: Separate pipelines per Lambda with Source → Build → Deploy stages
+- **CodeBuild**: SAM build and package for each Lambda
+- **Webhook**: GitHub webhook handler that intelligently triggers pipelines
+- **S3**: Artifact storage for pipeline builds
+
+## 📁 Project Structure
+
+```
+├── template.yaml              # Main SAM template (all AWS resources)
+├── deploy.sh                  # Automated deployment script
+├── DEPLOYMENT.md              # Step-by-step deployment guide
+├── QUICK_REFERENCE.md         # Command reference and troubleshooting
+├── IAM_POLICIES.md           # IAM permissions reference
+├── IMPLEMENTATION_SUMMARY.md  # What was built and why
+│
+├── lambda1/                   # First Lambda function
+│   ├── app.py               # Lambda handler
+│   ├── requirements.txt      # Python dependencies
+│   └── buildspec.yml         # CodeBuild instructions
+│
+├── lambda2/                   # Second Lambda function
+│   ├── app.py               # Lambda handler
+│   ├── requirements.txt      # Python dependencies
+│   └── buildspec.yml         # CodeBuild instructions
+│
+├── layers/
+│   └── shared/              # Shared Lambda layer
+│       ├── python/
+│       │   ├── logger.py
+│       │   └── utils.py
+│       └── requirements.txt
+│
+└── webhook/                   # GitHub webhook handler
+    ├── app.py               # Webhook Lambda
+    └── requirements.txt
 ```
 
-This command builds the application and prepares it for local testing.
+## 🚀 How It Works
 
-### 2. Start Local API Gateway
+### Trigger Logic
 
-```bash
-sam local start-api
+Your webhook intelligently determines which pipelines to trigger based on changed files:
+
+```
+Push to: lambda1/app.py
+  → Triggers: lambda1-pipeline ONLY
+
+Push to: lambda2/app.py
+  → Triggers: lambda2-pipeline ONLY
+
+Push to: layers/shared/python/logger.py
+  → Triggers: BOTH pipelines (shared dependency)
+
+Push to: lambda1/app.py + lambda2/app.py
+  → Triggers: BOTH pipelines
 ```
 
-This starts a local API Gateway on `http://127.0.0.1:3000` with both Lambda endpoints available.
+### Deployment Flow
 
-**Available endpoints:**
-- Lambda1: `http://127.0.0.1:3000/lambda1`
-- Lambda2: `http://127.0.0.1:3000/lambda2`
-
-### 3. Test the Functions (in a new terminal)
-
-```bash
-# Test Lambda 1
-curl http://127.0.0.1:3000/lambda1
-
-# Test Lambda 2
-curl http://127.0.0.1:3000/lambda2
+```
+1. Developer pushes to GitHub
+   ↓
+2. GitHub sends webhook to webhook Lambda
+   ↓
+3. Webhook Lambda verifies signature & parses changed files
+   ↓
+4. Webhook Lambda calls StartPipelineExecution for relevant pipelines
+   ↓
+5. CodePipeline executes for each affected Lambda:
+   - Source stage: Pulls code from GitHub
+   - Build stage: Runs SAM build && sam package
+   - Deploy stage: CloudFormation creates/updates Lambda stack
 ```
 
-### 4. Invoke Functions Directly
+## 📚 Documentation
 
-Alternatively, invoke Lambda functions directly without API Gateway:
+| File | Purpose |
+|------|---------|
+| **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** | What was built, architecture overview, best practices |
+| **[DEPLOYMENT.md](DEPLOYMENT.md)** | Step-by-step deployment guide and troubleshooting |
+| **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** | Quick commands, testing procedures, common issues |
+| **[IAM_POLICIES.md](IAM_POLICIES.md)** | IAM permissions required for each component |
 
+**Start here**: [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)
+
+## 🔧 Deployment Methods
+
+### Method 1: Automated (Recommended)
 ```bash
-# Invoke Lambda 1
-sam local invoke Lambda1Function -e events.json
-
-# Invoke Lambda 2
-sam local invoke Lambda2Function -e events.json
+chmod +x deploy.sh
+./deploy.sh
 ```
 
-## Deployment to AWS
-
-### 1. Build the Application
-
+### Method 2: SAM CLI
 ```bash
-sam build
-```
-
-### 2. Deploy to AWS (First time)
-
-```bash
+sam build --template template.yaml
 sam deploy --guided
 ```
 
-This will prompt you to enter:
-- Stack name (e.g., `lambda-monorepo-stack`)
-- AWS region (e.g., `us-east-1`)
-- Confirm changes before deployment
-- Allow SAM CLI to create IAM roles
+### Method 3: AWS CLI
+```bash
+aws cloudformation deploy \
+  --template-file template.yaml \
+  --stack-name lambda-monorepo-stack \
+  --capabilities CAPABILITY_NAMED_IAM
+```
 
-### 3. Subsequent Deployments
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions on each method.
+
+## ⚙️ Configuration
+
+Before deploying, update:
+
+1. **template.yaml**:
+   - Replace `RohanKhanal14/lambda_monorepo` with your GitHub repo
+   - Replace `YOUR_CONNECTION_ID` with actual CodeStar Connection ARN
+
+2. **GitHub Webhook Secret**:
+   - Generate a strong random string
+   - Set in webhook Lambda environment variable
+
+## 🧪 Testing
+
+After deployment, test the trigger logic:
 
 ```bash
-sam deploy
+# Test 1: Trigger lambda1-pipeline only
+echo "# test" >> lambda1/app.py
+git add lambda1/app.py
+git commit -m "test lambda1"
+git push
+
+# Test 2: Trigger both pipelines
+echo "# test" >> layers/shared/python/logger.py
+git add layers/shared/python/logger.py
+git commit -m "test shared layer"
+git push
 ```
 
-Uses the settings from `samconfig.toml` for subsequent deployments.
+See [QUICK_REFERENCE.md](QUICK_REFERENCE.md) for monitoring commands.
 
-### 4. View Deployment Outputs
-
-After successful deployment, CloudFormation outputs will show:
-- Lambda function ARNs
-- API Gateway endpoint URL
-- Individual Lambda invocation URLs
-
-## Environment Variables
-
-The template supports environment variables through the `Environment` parameter:
+## 📊 Monitoring
 
 ```bash
-sam deploy --parameter-overrides Environment=prod
+# View pipeline status
+aws codepipeline get-pipeline-state --name lambda1-pipeline
+
+# View build logs
+aws logs tail /aws/codebuild/lambda1-build --follow
+
+# View Lambda logs
+aws logs tail /aws/lambda/lambda1 --follow
+
+# View webhook logs
+aws logs tail /aws/lambda/webhook --follow
 ```
 
-Allowed values: `dev`, `staging`, `prod`
+## 💡 Key Features
 
-## Cleanup
+✅ **Smart Triggering**: Only affected services deploy (faster feedback)
+✅ **Shared Layer Support**: Changes to shared code trigger all services
+✅ **Best Practices**: Uses SAM + CloudFormation production pattern
+✅ **Minimal Cost**: ~$2-3/month for this setup
+✅ **Fully Documented**: 4 comprehensive guides included
+✅ **Production Ready**: IAM least privilege, CloudFormation ChangeSet, logging
+✅ **Easy Testing**: Deploy script handles initial setup
 
-To delete the deployed resources:
+## 🔒 Security
 
-```bash
-aws cloudformation delete-stack --stack-name lambda-monorepo-stack
-```
+- GitHub webhook signature verification
+- IAM least privilege for all roles
+- S3 public access blocked
+- CloudWatch logging for all components
+- Secure secrets handling recommendations
 
-Or use the AWS Console to delete the CloudFormation stack.
+See [IAM_POLICIES.md](IAM_POLICIES.md) for security best practices.
 
-## Troubleshooting
+## 📈 Next Steps
 
-### Docker Connection Error
-```
-ERROR: Can't connect to Docker daemon
-```
-- Ensure Docker is running: `docker ps`
-- On Linux, you may need to run with `sudo` or add your user to the docker group
+After deployment:
 
-### Python Import Errors
-```
-ImportError: No module named 'common.logger'
-```
-- Ensure all dependencies in `requirements.txt` are installed
-- Run `sam build` to rebuild
+1. Add manual approval gates to pipelines
+2. Set up SNS notifications for failures
+3. Add integration tests to CodeBuild stage
+4. Implement canary deployments
+5. Set up CloudWatch alarms and dashboards
+6. Enable X-Ray tracing for Lambda functions
 
-### Port Already in Use
-```
-ERROR: Port 3000 is already in use
-```
-- Kill the process: `lsof -ti:3000 | xargs kill -9`
-- Or specify a different port: `sam local start-api --port 3001`
+## ❓ Troubleshooting
 
-## Advanced Usage
+1. **Webhook not triggering?**
+   - Check GITHUB_WEBHOOK_SECRET is set
+   - Verify webhook delivery in GitHub settings
+   - Check IAM permissions
 
-### Enable Debugging
+2. **CodeBuild failing?**
+   - View logs: `aws logs tail /aws/codebuild/lambda1-build --follow`
+   - Ensure S3 bucket exists
+   - Verify buildspec.yml syntax
 
-```bash
-sam local start-api --debug
-```
+3. **Lambda not updating?**
+   - Check CloudFormation stack events
+   - Verify template.yaml syntax
+   - Ensure packaged template available in S3
 
-### Watch Mode (Auto-rebuild)
+See [QUICK_REFERENCE.md](QUICK_REFERENCE.md) for more troubleshooting tips.
 
-```bash
-sam local start-api --warm-containers EAGER
-```
+## 📞 Support
 
-### Container Network
+- Check the troubleshooting section in [DEPLOYMENT.md](DEPLOYMENT.md)
+- Review [QUICK_REFERENCE.md](QUICK_REFERENCE.md) checklist
+- Check CloudWatch logs for error details
+- Review GitHub webhook deliveries for issues
 
-To connect containers to external services:
+## 📄 License
 
-```bash
-sam local start-api --docker-network sam-network
-```
+[Add your license here]
 
-## References
+## 🤝 Contributing
 
-- [AWS SAM Documentation](https://docs.aws.amazon.com/serverless-application-model/)
-- [SAM CLI Reference](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-reference.html)
-- [Lambda Layers](https://docs.aws.amazon.com/lambda/latest/dg/configuration-layers.html)
+[Add contribution guidelines here]
+
+---
+
+**Ready to deploy?** Start with [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) or run `./deploy.sh`!
