@@ -10,7 +10,7 @@ phases:
 
   pre_build:
     commands:
-      - cfn-lint template.yaml
+      - sam validate -t lambda1/template.yaml
 
   build:
     commands:
