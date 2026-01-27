@@ -1,69 +1,264 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Transform: AWS::Serverless-2010-05-13
-Description: 'Monorepo Lambda Functions with CodePipelines'
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  Lambda Monorepo - Serverless Application Model (SAM) Template
+  Manages multiple Lambda functions with shared layers, API Gateway integration, and CI/CD pipelines.
+
+Metadata:
+  AWS::ServerlessRepo::Application:
+    Name: lambda-monorepo
+    Description: Lambda monorepo with CI/CD integration and shared layers
+    Author: DevOps Team
+    SemanticVersion: 1.0.0
 
 Globals:
   Function:
-    Timeout: 30
     Runtime: python3.11
+    Timeout: 60
+    MemorySize: 256
     Environment:
       Variables:
-        LOG_LEVEL: INFO
+        LOG_LEVEL: !Ref LogLevel
+        ENVIRONMENT: !Ref Environment
+    Tracing: Active
+    Layers:
+      - !Ref SharedLayer
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment environment
+  
+  LogLevel:
+    Type: String
+    Default: INFO
+    AllowedValues:
+      - DEBUG
+      - INFO
+      - WARNING
+      - ERROR
+    Description: CloudWatch Log Level
+  
+  GitHubOwner:
+    Type: String
+    Description: GitHub repository owner
+  
+  GitHubRepo:
+    Type: String
+    Description: GitHub repository name
+  
+  GitHubBranch:
+    Type: String
+    Default: main
+    Description: GitHub branch to track
+  
+  GitHubToken:
+    Type: String
+    NoEcho: true
+    Description: GitHub personal access token
+  
+  GitHubWebhookSecret:
+    Type: String
+    NoEcho: true
+    Description: GitHub webhook secret for signature verification
+
+Conditions:
+  IsProd: !Equals [!Ref Environment, prod]
+  IsNotProd: !Not [!Condition IsProd]
 
 Resources:
-  # ==================== SHARED LAYER ====================
+  # ============================================================================
+  # Shared Lambda Layer
+  # ============================================================================
   SharedLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
-      LayerName: lambda-shared-layer
+      LayerName: !Sub '${AWS::StackName}-shared-layer'
+      Description: Shared Python libraries for all Lambda functions
       ContentUri: layers/shared
       CompatibleRuntimes:
         - python3.11
       RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: python3.11
 
-  # ==================== LAMBDA 1 ====================
+  # ============================================================================
+  # Lambda1 Function
+  # ============================================================================
   Lambda1Function:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: lambda1
+      FunctionName: !Sub '${AWS::StackName}-lambda1'
       CodeUri: lambda1/
       Handler: app.lambda_handler
-      Layers:
-        - !Ref SharedLayer
-      Runtime: python3.11
-      Timeout: 30
+      Description: Lambda1 function with shared layer integration
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: !GetAtt Lambda1LogGroup.Arn
+            - Effect: Allow
+              Action:
+                - xray:PutTraceSegments
+                - xray:PutTelemetryRecords
+              Resource: '*'
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: !Ref Lambda1LogGroup
+      Tags:
+        Environment: !Ref Environment
+        Function: Lambda1
 
   Lambda1LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub '/aws/lambda/${Lambda1Function}'
-      RetentionInDays: 7
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-lambda1'
+      RetentionInDays: !If [IsProd, 30, 7]
 
-  # ==================== LAMBDA 2 ====================
+  # ============================================================================
+  # Lambda2 Function
+  # ============================================================================
   Lambda2Function:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: lambda2
+      FunctionName: !Sub '${AWS::StackName}-lambda2'
       CodeUri: lambda2/
       Handler: app.lambda_handler
-      Layers:
-        - !Ref SharedLayer
-      Runtime: python3.11
-      Timeout: 30
+      Description: Lambda2 function with shared layer integration
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: !GetAtt Lambda2LogGroup.Arn
+            - Effect: Allow
+              Action:
+                - xray:PutTraceSegments
+                - xray:PutTelemetryRecords
+              Resource: '*'
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: !Ref Lambda2LogGroup
+      Tags:
+        Environment: !Ref Environment
+        Function: Lambda2
 
   Lambda2LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub '/aws/lambda/${Lambda2Function}'
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-lambda2'
+      RetentionInDays: !If [IsProd, 30, 7]
+
+  # ============================================================================
+  # GitHub Webhook Lambda Function
+  # ============================================================================
+  WebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-webhook'
+      CodeUri: webhook/
+      Handler: app.lambda_handler
+      Description: GitHub webhook handler for CodePipeline triggers
+      Environment:
+        Variables:
+          GITHUB_WEBHOOK_SECRET: !Ref GitHubWebhookSecret
+          LAMBDA1_PIPELINE_NAME: !Ref Lambda1Pipeline
+          LAMBDA2_PIPELINE_NAME: !Ref Lambda2Pipeline
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - codepipeline:StartPipelineExecution
+              Resource:
+                - !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${Lambda1Pipeline}'
+                - !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${Lambda2Pipeline}'
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: !GetAtt WebhookLogGroup.Arn
+            - Effect: Allow
+              Action:
+                - xray:PutTraceSegments
+                - xray:PutTelemetryRecords
+              Resource: '*'
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: !Ref WebhookLogGroup
+      Events:
+        GitHubWebhook:
+          Type: Api
+          Properties:
+            RestApiId: !Ref WebhookApi
+            Path: /webhook
+            Method: post
+            Auth:
+              ApiKeyRequired: false
+      Tags:
+        Environment: !Ref Environment
+        Function: Webhook
+
+  WebhookLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-webhook'
       RetentionInDays: 7
 
-  # ==================== ARTIFACT BUCKET ====================
+  # ============================================================================
+  # API Gateway for Webhook
+  # ============================================================================
+  WebhookApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-webhook-api'
+      Description: GitHub webhook API for triggering CodePipelines
+      StageName: !Ref Environment
+      TracingEnabled: true
+      MethodSettings:
+        - ResourcePath: '/*'
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          DataTraceEnabled: true
+          MetricsEnabled: true
+      AccessLogSetting:
+        DestinationArn: !GetAtt WebhookApiLogGroup.Arn
+        Format: '$context.requestId $context.extendedRequestId $context.identity.sourceIp $context.requestTime $context.routeKey $context.status'
+
+  WebhookApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/apigateway/${AWS::StackName}-webhook'
+      RetentionInDays: 7
+
+  # ============================================================================
+  # S3 Bucket for Pipeline Artifacts
+  # ============================================================================
   ArtifactBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub 'lambda-monorepo-artifacts-${AWS::AccountId}'
+      BucketName: !Sub '${AWS::StackName}-artifacts-${AWS::AccountId}'
+      Description: Stores pipeline artifacts for Lambda builds
       VersioningConfiguration:
         Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -75,8 +270,13 @@ Resources:
             Status: Enabled
             ExpirationInDays: 30
             NoncurrentVersionExpirationInDays: 7
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
 
-  # ==================== IAM ROLES ====================
+  # ============================================================================
+  # IAM Roles and Policies
+  # ============================================================================
   CodePipelineRole:
     Type: AWS::IAM::Role
     Properties:
@@ -86,175 +286,45 @@ Resources:
           - Effect: Allow
             Principal:
               Service: codepipeline.amazonaws.com
-            Action: 'sts:AssumeRole'
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/AWSCodePipelineFullAccess'
+            Action: sts:AssumeRole
       Policies:
-        - PolicyName: S3Access
+        - PolicyName: CodePipelinePolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
-                  - 's3:GetObject'
-                  - 's3:GetObjectVersion'
-                  - 's3:PutObject'
-                  - 's3:GetBucketVersioning'
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:GetBucketVersioning
                 Resource:
                   - !GetAtt ArtifactBucket.Arn
                   - !Sub '${ArtifactBucket.Arn}/*'
-        - PolicyName: CodeBuildAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
               - Effect: Allow
                 Action:
-                  - 'codebuild:BatchGetBuilds'
-                  - 'codebuild:BatchGetProjects'
-                  - 'codebuild:BatchGetReports'
-                  - 'codebuild:BatchGetReportGroups'
-                  - 'codebuild:CreateReport'
-                  - 'codebuild:CreateReportGroup'
-                  - 'codebuild:UpdateReport'
-                  - 'codebuild:UpdateReportGroup'
-                  - 'codebuild:StartBuild'
-                Resource: '*'
-        - PolicyName: CloudFormationAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
+                  - codebuild:BatchGetBuilds
+                  - codebuild:BatchGetBuildBatches
+                  - codebuild:StartBuild
+                  - codebuild:StartBuildBatch
+                Resource:
+                  - !GetAtt Lambda1BuildProject.Arn
+                  - !GetAtt Lambda2BuildProject.Arn
               - Effect: Allow
                 Action:
-                  - 'cloudformation:*'
-                Resource: '*'
+                  - cloudformation:CreateStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DeleteStack
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:DeleteChangeSet
+                Resource: !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}-*'
               - Effect: Allow
                 Action:
-                  - 'iam:PassRole'
+                  - iam:PassRole
                 Resource: !GetAtt CloudFormationRole.Arn
-
-  CloudFormationRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: lambda-monorepo-cloudformation-role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: cloudformation.amazonaws.com
-            Action: 'sts:AssumeRole'
-      Policies:
-        - PolicyName: CloudFormationSAMDeployment
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              # ===== CloudFormation Stack Operations =====
-              - Sid: CloudFormationStackOps
-                Effect: Allow
-                Action:
-                  - 'cloudformation:CreateChangeSet'
-                  - 'cloudformation:DescribeChangeSet'
-                  - 'cloudformation:ExecuteChangeSet'
-                  - 'cloudformation:DeleteChangeSet'
-                  - 'cloudformation:DescribeStacks'
-                  - 'cloudformation:CreateStack'
-                  - 'cloudformation:UpdateStack'
-                  - 'cloudformation:DeleteStack'
-                  - 'cloudformation:GetTemplate'
-                  - 'cloudformation:ListStackResources'
-                Resource: 
-                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/*'
-
-              # ===== SAM Transform Support =====
-              - Sid: SAMTransform
-                Effect: Allow
-                Action:
-                  - 'cloudformation:CreateChangeSet'
-                  - 'cloudformation:DescribeChangeSet'
-                  - 'cloudformation:ExecuteChangeSet'
-                  - 'cloudformation:DeleteChangeSet'
-                Resource:
-                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/*'
-                  - 'arn:aws:cloudformation:*:aws:transform/Serverless-2010-05-13'
-
-              # ===== IAM PassRole (Required for CloudFormation to assume other roles) =====
-              - Sid: IAMPassRole
-                Effect: Allow
-                Action:
-                  - 'iam:PassRole'
-                Resource: '*'
-                Condition:
-                  StringEquals:
-                    'iam:PassedToService':
-                      - 'lambda.amazonaws.com'
-                      - 'apigateway.amazonaws.com'
-
-              # ===== Lambda Operations =====
-              - Sid: LambdaOperations
-                Effect: Allow
-                Action:
-                  - 'lambda:CreateFunction'
-                  - 'lambda:DeleteFunction'
-                  - 'lambda:UpdateFunction'
-                  - 'lambda:UpdateFunctionCode'
-                  - 'lambda:UpdateFunctionConfiguration'
-                  - 'lambda:AddPermission'
-                  - 'lambda:RemovePermission'
-                  - 'lambda:GetFunction'
-                  - 'lambda:GetFunctionConfiguration'
-                  - 'lambda:PublishVersion'
-                  - 'lambda:CreateAlias'
-                  - 'lambda:UpdateAlias'
-                  - 'lambda:DeleteAlias'
-                  - 'lambda:ListFunctions'
-                  - 'lambda:TagResource'
-                  - 'lambda:UntagResource'
-                  - 'lambda:ListLayerVersions'
-                  - 'lambda:PublishLayerVersion'
-                  - 'lambda:DeleteLayerVersion'
-                Resource: 
-                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:lambda*'
-                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:*'
-
-              # ===== CloudWatch Logs =====
-              - Sid: CloudWatchLogsOps
-                Effect: Allow
-                Action:
-                  - 'logs:CreateLogGroup'
-                  - 'logs:DeleteLogGroup'
-                  - 'logs:CreateLogStream'
-                  - 'logs:DeleteLogStream'
-                  - 'logs:PutRetentionPolicy'
-                  - 'logs:TagLogGroup'
-                  - 'logs:UntagLogGroup'
-                Resource:
-                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
-
-              # ===== S3 Artifact Bucket Access =====
-              - Sid: S3ArtifactAccess
-                Effect: Allow
-                Action:
-                  - 's3:GetObject'
-                  - 's3:GetObjectVersion'
-                  - 's3:PutObject'
-                  - 's3:ListBucket'
-                Resource:
-                  - !GetAtt ArtifactBucket.Arn
-                  - !Sub '${ArtifactBucket.Arn}/*'
-
-              # ===== API Gateway (Optional - if Lambda needs API) =====
-              - Sid: APIGatewayOps
-                Effect: Allow
-                Action:
-                  - 'apigateway:*'
-                Resource: '*'
-
-              # ===== CodeStar Connections (for GitHub) =====
-              - Sid: CodeStarConnections
-                Effect: Allow
-                Action:
-                  - 'codestar-connections:UseConnection'
-                Resource: !Sub 'arn:aws:codestar-connections:${AWS::Region}:${AWS::AccountId}:connection/*'
 
   CodeBuildRole:
     Type: AWS::IAM::Role
@@ -265,37 +335,50 @@ Resources:
           - Effect: Allow
             Principal:
               Service: codebuild.amazonaws.com
-            Action: 'sts:AssumeRole'
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess'
+            Action: sts:AssumeRole
       Policies:
-        - PolicyName: CloudWatchLogs
+        - PolicyName: CodeBuildPolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
-                  - 'logs:CreateLogGroup'
-                  - 'logs:CreateLogStream'
-                  - 'logs:PutLogEvents'
-                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*'
-        - PolicyName: S3Access
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 's3:GetObject'
-                  - 's3:GetObjectVersion'
-                  - 's3:PutObject'
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
                 Resource:
-                  - !Sub '${ArtifactBucket.Arn}/*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*'
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub '${ArtifactBucket.Arn}/*'
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: '*'
 
-  # ==================== CODEBUILD PROJECTS ====================
+  CloudFormationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+  # ============================================================================
+  # CodeBuild Projects
+  # ============================================================================
   Lambda1BuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: lambda1-build
+      Name: !Sub '${AWS::StackName}-lambda1-build'
+      Description: Build project for Lambda1
       ServiceRole: !GetAtt CodeBuildRole.Arn
       Artifacts:
         Type: CODEPIPELINE
@@ -304,18 +387,23 @@ Resources:
         Image: aws/codebuild/standard:7.0
         Type: LINUX_CONTAINER
         EnvironmentVariables:
-          - Name: S3_BUCKET
+          - Name: ARTIFACT_BUCKET
             Value: !Ref ArtifactBucket
-          - Name: LAMBDA_NAME
+          - Name: LAMBDA_FUNCTION
             Value: lambda1
       Source:
         Type: CODEPIPELINE
         BuildSpec: lambda1/buildspec.yml
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Sub '/aws/codebuild/${AWS::StackName}-lambda1'
 
   Lambda2BuildProject:
     Type: AWS::CodeBuild::Project
     Properties:
-      Name: lambda2-build
+      Name: !Sub '${AWS::StackName}-lambda2-build'
+      Description: Build project for Lambda2
       ServiceRole: !GetAtt CodeBuildRole.Arn
       Artifacts:
         Type: CODEPIPELINE
@@ -324,19 +412,25 @@ Resources:
         Image: aws/codebuild/standard:7.0
         Type: LINUX_CONTAINER
         EnvironmentVariables:
-          - Name: S3_BUCKET
+          - Name: ARTIFACT_BUCKET
             Value: !Ref ArtifactBucket
-          - Name: LAMBDA_NAME
+          - Name: LAMBDA_FUNCTION
             Value: lambda2
       Source:
         Type: CODEPIPELINE
         BuildSpec: lambda2/buildspec.yml
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Sub '/aws/codebuild/${AWS::StackName}-lambda2'
 
-  # ==================== CODEPIPELINE FOR LAMBDA 1 ====================
+  # ============================================================================
+  # CodePipelines
+  # ============================================================================
   Lambda1Pipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
-      Name: lambda1-pipeline
+      Name: !Sub '${AWS::StackName}-lambda1-pipeline'
       RoleArn: !GetAtt CodePipelineRole.Arn
       ArtifactStore:
         Type: S3
@@ -347,16 +441,16 @@ Resources:
             - Name: SourceAction
               ActionTypeId:
                 Category: Source
-                Owner: AWS
-                Provider: CodeStarSourceConnection
+                Owner: ThirdParty
+                Provider: GitHub
                 Version: '1'
               Configuration:
-                FullRepositoryId: !Sub 'RohanKhanal14/lambda_monorepo'
-                BranchName: main
-                ConnectionArn: !Sub 'arn:aws:codestar-connections:${AWS::Region}:${AWS::AccountId}:connection/YOUR_CONNECTION_ID'
+                Owner: !Ref GitHubOwner
+                Repo: !Ref GitHubRepo
+                Branch: !Ref GitHubBranch
+                OAuthToken: !Ref GitHubToken
               OutputArtifacts:
                 - Name: SourceOutput
-              RunOrder: 1
 
         - Name: Build
           Actions:
@@ -372,11 +466,10 @@ Resources:
                 - Name: SourceOutput
               OutputArtifacts:
                 - Name: BuildOutput
-              RunOrder: 1
 
         - Name: Deploy
           Actions:
-            - Name: CreateChangeSet
+            - Name: DeployAction
               ActionTypeId:
                 Category: Deploy
                 Owner: AWS
@@ -384,8 +477,8 @@ Resources:
                 Version: '1'
               Configuration:
                 ActionMode: CHANGE_SET_REPLACE
-                StackName: lambda1-stack
-                ChangeSetName: lambda1-changeset
+                StackName: !Sub '${AWS::StackName}-lambda1-stack'
+                ChangeSetName: !Sub '${AWS::StackName}-lambda1-changeset'
                 TemplatePath: BuildOutput::packaged.yaml
                 Capabilities: CAPABILITY_IAM,CAPABILITY_AUTO_EXPAND
                 RoleArn: !GetAtt CloudFormationRole.Arn
@@ -401,15 +494,14 @@ Resources:
                 Version: '1'
               Configuration:
                 ActionMode: CHANGE_SET_EXECUTE
-                StackName: lambda1-stack
-                ChangeSetName: lambda1-changeset
+                StackName: !Sub '${AWS::StackName}-lambda1-stack'
+                ChangeSetName: !Sub '${AWS::StackName}-lambda1-changeset'
               RunOrder: 2
 
-  # ==================== CODEPIPELINE FOR LAMBDA 2 ====================
   Lambda2Pipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
-      Name: lambda2-pipeline
+      Name: !Sub '${AWS::StackName}-lambda2-pipeline'
       RoleArn: !GetAtt CodePipelineRole.Arn
       ArtifactStore:
         Type: S3
@@ -420,16 +512,16 @@ Resources:
             - Name: SourceAction
               ActionTypeId:
                 Category: Source
-                Owner: AWS
-                Provider: CodeStarSourceConnection
+                Owner: ThirdParty
+                Provider: GitHub
                 Version: '1'
               Configuration:
-                FullRepositoryId: !Sub 'RohanKhanal14/lambda_monorepo'
-                BranchName: main
-                ConnectionArn: !Sub 'arn:aws:codestar-connections:${AWS::Region}:${AWS::AccountId}:connection/YOUR_CONNECTION_ID'
+                Owner: !Ref GitHubOwner
+                Repo: !Ref GitHubRepo
+                Branch: !Ref GitHubBranch
+                OAuthToken: !Ref GitHubToken
               OutputArtifacts:
                 - Name: SourceOutput
-              RunOrder: 1
 
         - Name: Build
           Actions:
@@ -445,11 +537,10 @@ Resources:
                 - Name: SourceOutput
               OutputArtifacts:
                 - Name: BuildOutput
-              RunOrder: 1
 
         - Name: Deploy
           Actions:
-            - Name: CreateChangeSet
+            - Name: DeployAction
               ActionTypeId:
                 Category: Deploy
                 Owner: AWS
@@ -457,8 +548,8 @@ Resources:
                 Version: '1'
               Configuration:
                 ActionMode: CHANGE_SET_REPLACE
-                StackName: lambda2-stack
-                ChangeSetName: lambda2-changeset
+                StackName: !Sub '${AWS::StackName}-lambda2-stack'
+                ChangeSetName: !Sub '${AWS::StackName}-lambda2-changeset'
                 TemplatePath: BuildOutput::packaged.yaml
                 Capabilities: CAPABILITY_IAM,CAPABILITY_AUTO_EXPAND
                 RoleArn: !GetAtt CloudFormationRole.Arn
@@ -474,37 +565,77 @@ Resources:
                 Version: '1'
               Configuration:
                 ActionMode: CHANGE_SET_EXECUTE
-                StackName: lambda2-stack
-                ChangeSetName: lambda2-changeset
+                StackName: !Sub '${AWS::StackName}-lambda2-stack'
+                ChangeSetName: !Sub '${AWS::StackName}-lambda2-changeset'
               RunOrder: 2
 
 Outputs:
-  Lambda1FunctionArn:
-    Description: ARN of Lambda 1 Function
-    Value: !GetAtt Lambda1Function.Arn
-    Export:
-      Name: Lambda1FunctionArn
-
-  Lambda2FunctionArn:
-    Description: ARN of Lambda 2 Function
-    Value: !GetAtt Lambda2Function.Arn
-    Export:
-      Name: Lambda2FunctionArn
-
   SharedLayerArn:
-    Description: ARN of Shared Layer
+    Description: ARN of the shared Lambda layer
     Value: !Ref SharedLayer
     Export:
-      Name: SharedLayerArn
+      Name: !Sub '${AWS::StackName}-SharedLayerArn'
+
+  Lambda1FunctionArn:
+    Description: ARN of Lambda1 function
+    Value: !GetAtt Lambda1Function.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-Lambda1Arn'
+
+  Lambda1FunctionName:
+    Description: Name of Lambda1 function
+    Value: !Ref Lambda1Function
+    Export:
+      Name: !Sub '${AWS::StackName}-Lambda1Name'
+
+  Lambda2FunctionArn:
+    Description: ARN of Lambda2 function
+    Value: !GetAtt Lambda2Function.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-Lambda2Arn'
+
+  Lambda2FunctionName:
+    Description: Name of Lambda2 function
+    Value: !Ref Lambda2Function
+    Export:
+      Name: !Sub '${AWS::StackName}-Lambda2Name'
+
+  WebhookFunctionArn:
+    Description: ARN of Webhook Lambda function
+    Value: !GetAtt WebhookFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-WebhookArn'
+
+  WebhookFunctionName:
+    Description: Name of Webhook Lambda function
+    Value: !Ref WebhookFunction
+    Export:
+      Name: !Sub '${AWS::StackName}-WebhookName'
+
+  WebhookApiEndpoint:
+    Description: API Gateway endpoint for GitHub webhook
+    Value: !Sub 'https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/webhook'
+    Export:
+      Name: !Sub '${AWS::StackName}-WebhookEndpoint'
 
   ArtifactBucketName:
-    Description: S3 Bucket for Pipeline Artifacts
+    Description: S3 bucket for pipeline artifacts
     Value: !Ref ArtifactBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-ArtifactBucket'
 
   Lambda1PipelineName:
-    Description: Lambda 1 CodePipeline Name
+    Description: Name of Lambda1 CodePipeline
     Value: !Ref Lambda1Pipeline
+    Export:
+      Name: !Sub '${AWS::StackName}-Lambda1Pipeline'
 
   Lambda2PipelineName:
-    Description: Lambda 2 CodePipeline Name
+    Description: Name of Lambda2 CodePipeline
     Value: !Ref Lambda2Pipeline
+    Export:
+      Name: !Sub '${AWS::StackName}-Lambda2Pipeline'
+
+  StackName:
+    Description: CloudFormation Stack Name
+    Value: !Ref AWS::StackName

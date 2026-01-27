@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Lambda2 stack (SAM) - monorepo
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 30
+    MemorySize: 128
+    Environment:
+      Variables:
+        LOG_LEVEL: INFO
+        ENVIRONMENT: !Ref Environment
+
+Resources:
+  SharedLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub 'shared-layer-${Environment}'
+      Description: Shared utilities for all lambdas
+      ContentUri: ../layers/shared
+      CompatibleRuntimes:
+        - python3.11
+      RetentionPolicy: Delete
+
+  Lambda2Function:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'lambda2-${Environment}'
+      CodeUri: .
+      Handler: app.lambda_handler
+      Layers:
+        - !Ref SharedLayer
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Tags:
+        Name: lambda2
+        Environment: !Ref Environment
+        Purpose: test
+        Owner: rohan.khanal
+        Project: GUMP_NOW
+
+  Lambda2LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${Lambda2Function}'
+      RetentionInDays: 7
+
+Outputs:
+  Lambda2FunctionArn:
+    Value: !GetAtt Lambda2Function.Arn
+  SharedLayerArn:
+    Value: !Ref SharedLayer

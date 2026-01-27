@@ -1,0 +1,42 @@
+# SAM Configuration File
+# This file stores default parameters for `sam deploy` commands
+
+version = 0.1
+
+[default]
+[default.deploy]
+region = "us-east-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
+disable_rollback = false
+enable_monitoring = true
+s3_bucket = "sam-cli-managed-default-samclisourcebucket"
+s3_prefix = "lambda-monorepo"
+stack_name = "lambda-monorepo"
+parameter_overrides = [
+  "Environment=dev",
+  "LogLevel=INFO"
+]
+
+[default.build]
+managed_stack = true
+use_container = true
+
+[default.validate]
+strict = false
+
+[staging.deploy]
+region = "us-east-1"
+stack_name = "lambda-monorepo-staging"
+parameter_overrides = [
+  "Environment=staging",
+  "LogLevel=INFO"
+]
+
+[prod.deploy]
+region = "us-east-1"
+stack_name = "lambda-monorepo-prod"
+parameter_overrides = [
+  "Environment=prod",
+  "LogLevel=WARNING"
+]
