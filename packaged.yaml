@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Lambda1 stack (SAM) - monorepo
+Parameters:
+  Environment:
+    Type: String
+    Default: Development
+    AllowedValues:
+    - Development
+    - Staging
+    - Production
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 30
+    MemorySize: 128
+    Environment:
+      Variables:
+        LOG_LEVEL: INFO
+        ENVIRONMENT:
+          Ref: Environment
+    Tags:
+      Environment:
+        Ref: Environment
+      Purpose: test
+      Owner: rohan.khanal
+      Project: GUMP_NOW
+Resources:
+  SharedLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName:
+        Fn::Sub: shared-layer-${Environment}
+      Description: Shared utilities for all lambdas
+      ContentUri: s3://lambda-monorepo-lambda1-artifacts/lambda1//11aa7748c6ca0d89a0b763646ebd2708
+      CompatibleRuntimes:
+      - python3.11
+      RetentionPolicy: Delete
+    Tags:
+      Environment:
+        Ref: Environment
+      Purpose: test
+      Owner: rohan.khanal
+      Project: GUMP_NOW
+      Name:
+        Fn::Sub: shared-layer-${Environment}
+    Metadata:
+      SamResourceId: SharedLayer
+  Lambda1Function:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: lambda1-${Environment}
+      CodeUri: s3://lambda-monorepo-lambda1-artifacts/lambda1//dc9bc09407415e9cb345809dd681bd48
+      Handler: app.lambda_handler
+      Layers:
+      - Ref: SharedLayer
+      Policies:
+      - AWSLambdaBasicExecutionRole
+      Tags:
+        Name:
+          Fn::Sub: lambda1-${Environment}
+    Metadata:
+      SamResourceId: Lambda1Function
+Outputs:
+  Lambda1FunctionArn:
+    Value:
+      Fn::GetAtt:
+      - Lambda1Function
+      - Arn
+  SharedLayerArn:
+    Value:
+      Ref: SharedLayer
