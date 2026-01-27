@@ -1,0 +1,2 @@
+# Shared Layer Dependencies
+# These are packaged into the layer and available to all Lambda functions
