@@ -19,9 +19,14 @@ phases:
       - sam package
         --template-file .aws-sam/build/template.yaml
         --s3-bucket $S3_BUCKET
-        --s3-prefix $LAMBDA_NAME/$CODEBUILD_RESOLVED_SOURCE_VERSION
+        --s3-prefix lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION
         --output-template-file packaged.yaml
         --region $AWS_REGION
+      - echo "==== packaged.yaml CodeUri S3 references ===="
+      - grep -n "S3Bucket\|S3Key\|s3://" -n packaged.yaml || true
+      - aws s3 ls "s3://$S3_BUCKET/lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION/" --recursive || true
+      - echo "==== List uploaded artifacts in S3 prefix ===="
+
 
 artifacts:
   files:

@@ -19,9 +19,10 @@ phases:
       - sam package
         --template-file .aws-sam/build/template.yaml
         --s3-bucket $S3_BUCKET
-        --s3-prefix $LAMBDA_NAME/$CODEBUILD_RESOLVED_SOURCE_VERSION
+        --s3-prefix lambda2/$CODEBUILD_RESOLVED_SOURCE_VERSION
         --output-template-file packaged.yaml
         --region $AWS_REGION
+      
 
 artifacts:
   files:
