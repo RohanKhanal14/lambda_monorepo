@@ -35,7 +35,7 @@ Resources:
       ContentUri: s3://lambda-monorepo-lambda1-artifacts/lambda1//41146d60c919cd3e419db6495dffe8d3
       CompatibleRuntimes:
       - python3.11
-      RetentionPolicy: Delete
+      RetentionPolicy: Retain
     Tags:
       Environment:
         Ref: Environment
@@ -51,7 +51,7 @@ Resources:
     Properties:
       FunctionName:
         Fn::Sub: lambda1-${Environment}
-      CodeUri: s3://lambda-monorepo-lambda1-artifacts/lambda1//dcaac2a98d6361b158dfbc02d450bb17
+      CodeUri: s3://lambda-monorepo-lambda1-artifacts/lambda1//2cc310dc0a1a1226113a0c3886eeb0dd
       Handler: app.lambda_handler
       Layers:
       - Ref: SharedLayer
@@ -60,6 +60,11 @@ Resources:
       Tags:
         Name:
           Fn::Sub: lambda1-${Environment}
+        Environment:
+          Ref: Environment
+        Purpose: test
+        Owner: rohan.khanal
+        Project: GUMP_NOW
     Metadata:
       SamResourceId: Lambda1Function
 Outputs:
