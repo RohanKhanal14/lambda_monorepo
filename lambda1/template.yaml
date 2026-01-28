@@ -83,7 +83,7 @@ Globals:
     Tags:
       Environment: !Ref Environment
       Purpose: test
-      Owner: AWSCodePipelineServiceRole-ap-south-1-lambda1-monorepo-pipeline
+      Owner: lambda-monorepo-cloudforation-role
       Project: GUMP_NOW
 
 Resources:
@@ -100,7 +100,7 @@ Resources:
     Tags:
       Environment: !Ref Environment
       Purpose: test
-      Owner: AWSCodePipelineServiceRole-ap-south-1-lambda1-monorepo-pipeline
+      Owner: lambda-monorepo-cloudforation-role
       Project: GUMP_NOW
       Name: !Sub 'shared-layer-${Environment}'
 
