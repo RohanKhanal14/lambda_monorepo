@@ -83,7 +83,7 @@ Globals:
     Tags:
       Environment: !Ref Environment
       Purpose: test
-      Owner: lambda-monorepo-cloudforation-role
+      Owner: AWSCloudFormation
       Project: GUMP_NOW
 
 Resources:
@@ -100,7 +100,7 @@ Resources:
     Tags:
       Environment: !Ref Environment
       Purpose: test
-      Owner: lambda-monorepo-cloudforation-role
+      Owner: AWSCloudFormation
       Project: GUMP_NOW
       Name: !Sub 'shared-layer-${Environment}'
 
@@ -116,6 +116,10 @@ Resources:
         - AWSLambdaBasicExecutionRole
       Tags:
         Name: !Sub 'lambda1-${Environment}'
+        Environment: !Ref Environment
+        Purpose: test
+        Owner: AWSCloudFormation
+        Project: GUMP_NOW
 
 Outputs:
   Lambda1FunctionArn:
