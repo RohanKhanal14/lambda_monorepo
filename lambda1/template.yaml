@@ -95,7 +95,8 @@ Resources:
       ContentUri: ../layers/shared
       CompatibleRuntimes:
         - python3.11
-      RetentionPolicy: Delete
+      RetentionPolicy: Retain
+      
     Tags:
       Environment: !Ref Environment
       Purpose: test

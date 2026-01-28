@@ -27,7 +27,6 @@ phases:
       - aws s3 ls "s3://$S3_BUCKET/lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION/" --recursive || true
       - echo "==== List uploaded artifacts in S3 prefix ===="
 
-
 artifacts:
   files:
     - packaged.yaml

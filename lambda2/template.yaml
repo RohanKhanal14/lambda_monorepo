@@ -5,8 +5,11 @@ Description: Lambda2 stack (SAM) - monorepo
 Parameters:
   Environment:
     Type: String
-    Default: dev
-    AllowedValues: [dev, staging, prod]
+    Default: Development
+    AllowedValues:
+      - Development
+      - Staging
+      - Production
 
 Globals:
   Function:
@@ -17,6 +20,11 @@ Globals:
       Variables:
         LOG_LEVEL: INFO
         ENVIRONMENT: !Ref Environment
+    Tags:
+      Environment: !Ref Environment
+      Purpose: test
+      Owner: rohan.khanal
+      Project: GUMP_NOW
 
 Resources:
   SharedLayer:
@@ -27,7 +35,14 @@ Resources:
       ContentUri: ../layers/shared
       CompatibleRuntimes:
         - python3.11
-      RetentionPolicy: Delete
+      RetentionPolicy: Retain
+
+    Tags:
+      Environment: !Ref Environment
+      Purpose: test
+      Owner: rohan.khanal
+      Project: GUMP_NOW
+      Name: !Sub 'shared-layer-${Environment}'
 
   Lambda2Function:
     Type: AWS::Serverless::Function
@@ -45,12 +60,6 @@ Resources:
         Purpose: test
         Owner: rohan.khanal
         Project: GUMP_NOW
-
-  Lambda2LogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub '/aws/lambda/${Lambda2Function}'
-      RetentionInDays: 7
 
 Outputs:
   Lambda2FunctionArn:
