@@ -4,7 +4,7 @@ from datetime import datetime
 
 def get_logger(name):
     """
-    Creates a configured logger for Lambda functionsn hehennnn
+    Creates a configured logger for Lambda functionsn hehennnnvvv
     """
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
