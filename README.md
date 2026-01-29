@@ -1,6 +1,55 @@
 # Lambda Monorepo
 
-A monorepo containing AWS Lambda functions and shared layers.
+A monorepo containing AWS Lambda functions and shared layers with automated CI/CD pipelines.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     GitHub Repository                           │
+│                    (Webhook Listener)                           │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                    ┌────────┴────────┐
+                    │                 │
+        ┌───────────▼──────┐  ┌──────▼────────────┐
+        │  Push to lambda1  │  │  Push to lambda2  │
+        │     folder        │  │     folder        │
+        └────────┬──────────┘  └──────┬────────────┘
+                 │                    │
+        ┌────────▼──────────┐  ┌──────▼────────────┐
+        │  Lambda1 Pipeline │  │  Lambda2 Pipeline │
+        │  (buildspec.yml)  │  │  (buildspec.yml)  │
+        └────────┬──────────┘  └──────┬────────────┘
+                 │                    │
+        ┌────────▼──────────┐  ┌──────▼────────────┐
+        │   Build Lambda1   │  │   Build Lambda2   │
+        │  Dependencies +   │  │  Dependencies +   │
+        │  app.py + Layer   │  │  app.py + Layer   │
+        └────────┬──────────┘  └──────┬────────────┘
+                 │                    │
+        ┌────────▼──────────┐  ┌──────▼────────────┐
+        │   Deploy Lambda1  │  │   Deploy Lambda2  │
+        │    via SAM        │  │    via SAM        │
+        └──────────────────┘  └───────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Shared Layer (layers/shared)                                   │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │ - logger.py (logging utilities)                            │ │
+│  │ - utils.py (common utilities)                              │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│                                                                   │
+│  Triggers BOTH Lambda1 and Lambda2 pipelines on changes          │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│  Webhook Service                                                │
+│  - Receives GitHub webhook events                               │
+│  - Routes to appropriate pipeline based on file path            │
+│  - Handles branch filtering                                     │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ## Structure
 
