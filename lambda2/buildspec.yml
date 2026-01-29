@@ -85,7 +85,7 @@ phases:
     commands:
       - echo "======== Pre-build Phase ========"
       - echo "Copying shared modules to lambda2..."
-      - cp -r ../shared/* .
+      - cp ../shared/python/ .
       - echo "✓ Shared modules copied"
       
       - echo "Setting up layer requirements..."
