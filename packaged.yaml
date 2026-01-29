@@ -32,7 +32,7 @@ Resources:
       LayerName:
         Fn::Sub: shared-layer-${Environment}
       Description: Shared utilities for all lambdas
-      ContentUri: s3://lambda-monorepo-lambda1-artifacts/lambda1//41146d60c919cd3e419db6495dffe8d3
+      ContentUri: s3://ami-prowler-report-bucket/lambda1//41146d60c919cd3e419db6495dffe8d3
       CompatibleRuntimes:
       - python3.11
       RetentionPolicy: Retain
@@ -51,7 +51,7 @@ Resources:
     Properties:
       FunctionName:
         Fn::Sub: lambda1-${Environment}
-      CodeUri: s3://lambda-monorepo-lambda1-artifacts/lambda1//2cc310dc0a1a1226113a0c3886eeb0dd
+      CodeUri: s3://ami-prowler-report-bucket/lambda1//7433a23738c9c767cda8412f450b7d54
       Handler: app.lambda_handler
       Layers:
       - Ref: SharedLayer

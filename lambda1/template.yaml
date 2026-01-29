@@ -83,7 +83,7 @@ Globals:
     Tags:
       Environment: !Ref Environment
       Purpose: test
-      Owner: AWSCloudFormation
+      Owner: rohan.khanal
       Project: GUMP_NOW
 
 Resources:
@@ -100,7 +100,7 @@ Resources:
     Tags:
       Environment: !Ref Environment
       Purpose: test
-      Owner: AWSCloudFormation
+      Owner: rohan.khanal
       Project: GUMP_NOW
       Name: !Sub 'shared-layer-${Environment}'
 
@@ -118,7 +118,7 @@ Resources:
         Name: !Sub 'lambda1-${Environment}'
         Environment: !Ref Environment
         Purpose: test
-        Owner: AWSCloudFormation
+        Owner: rohan.khanal
         Project: GUMP_NOW
 
 Outputs:
