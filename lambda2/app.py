@@ -10,7 +10,7 @@ def lambda_handler(event, context):
     return {
         'statusCode': 200,
         'body': json.dumps({
-            'message': 'Hello from Lambda multi test! tyesting for lambda2',
+            'message': 'Hello from Lambda multi test! tyesting for lambda2sss',
             'lambda': 'lambda2'
         })
     }
