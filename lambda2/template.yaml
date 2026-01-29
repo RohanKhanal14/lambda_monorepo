@@ -1,76 +1,6 @@
-# AWSTemplateFormatVersion: '2010-09-09'
-# Transform: AWS::Serverless-2016-10-31
-# Description: Lambda2 stack (SAM) - monorepo
-
-# Parameters:
-#   Environment:
-#     Type: String
-#     Default: Development
-#     AllowedValues:
-#       - Development
-#       - Staging
-#       - Production
-
-# Globals:
-#   Function:
-#     Runtime: python3.11
-#     Timeout: 30
-#     MemorySize: 128
-#     Environment:
-#       Variables:
-#         LOG_LEVEL: INFO
-#         ENVIRONMENT: !Ref Environment
-#     Tags:
-#       Environment: !Ref Environment
-#       Purpose: test
-#       Owner: rohan.khanal
-#       Project: GUMP_NOW
-
-# Resources:
-#   SharedLayer:
-#     Type: AWS::Serverless::LayerVersion
-#     Properties:
-#       LayerName: !Sub 'shared-layer-${Environment}'
-#       Description: Shared utilities for all lambdas
-#       ContentUri: ../layers/shared
-#       CompatibleRuntimes:
-#         - python3.11
-#       RetentionPolicy: Retain
-
-#     Tags:
-#       Environment: !Ref Environment
-#       Purpose: test
-#       Owner: rohan.khanal
-#       Project: GUMP_NOW
-#       Name: !Sub 'shared-layer-${Environment}'
-
-#   Lambda2Function:
-#     Type: AWS::Serverless::Function
-#     Properties:
-#       FunctionName: !Sub 'lambda2-${Environment}'
-#       CodeUri: .
-#       Handler: app.lambda_handler
-#       Layers:
-#         - !Ref SharedLayer
-#       Policies:
-#         - AWSLambdaBasicExecutionRole
-#       Tags:
-#         Name: lambda2
-#         Environment: !Ref Environment
-#         Purpose: test
-#         Owner: rohan.khanal
-#         Project: GUMP_NOW
-
-# Outputs:
-#   Lambda2FunctionArn:
-#     Value: !GetAtt Lambda2Function.Arn
-#   SharedLayerArn:
-#     Value: !Ref SharedLayer
-
-
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: Lambda2 stack (SAM) - monorepo
+Description: lambda2 stack (SAM) - monorepo
 
 Parameters:
   Environment:
@@ -100,15 +30,17 @@ Globals:
       Project: GUMP_NOW
 
 Resources:
-  Lambda2DepsLayer:
+  lambda2DepsLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
       LayerName: !Sub "lambda2-deps-${Environment}"
-      Description: Lambda2 dependencies layer
-      ContentUri: ./layers/lib
+      Description: lambda2 dependencies layer (built from requirements.txt)
+      ContentUri: layers/lib
       CompatibleRuntimes:
         - python3.11
       RetentionPolicy: Retain
+    Metadata:
+      BuildMethod: python3.11
     Tags:
       Environment: !Ref Environment
       Purpose: test
@@ -116,14 +48,14 @@ Resources:
       Project: GUMP_NOW
       Name: !Sub "lambda2-deps-${Environment}"
 
-  Lambda2Function:
+  lambda2Function:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "lambda2-${Environment}"
       CodeUri: .
       Handler: app.lambda_handler
       Layers:
-        - !Ref Lambda2DepsLayer
+        - !Ref lambda2DepsLayer
       Policies:
         - AWSLambdaBasicExecutionRole
       Tags:
@@ -133,14 +65,14 @@ Resources:
         Owner: rohan.khanal
         Project: GUMP_NOW
 
-  Lambda2LogGroup:
+  lambda2LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/lambda/lambda2-${Environment}"
       RetentionInDays: 7
 
 Outputs:
-  Lambda2FunctionArn:
-    Value: !GetAtt Lambda2Function.Arn
-  Lambda2DepsLayerArn:
-    Value: !Ref Lambda2DepsLayer
+  lambda2FunctionArn:
+    Value: !GetAtt lambda2Function.Arn
+  lambda2DepsLayerArn:
+    Value: !Ref lambda2DepsLayer
