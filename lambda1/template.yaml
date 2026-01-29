@@ -1,3 +1,80 @@
+# AWSTemplateFormatVersion: "2010-09-09"
+# Transform: AWS::Serverless-2016-10-31
+# Description: Lambda1 stack (SAM) - monorepo
+
+# Parameters:
+#   Environment:
+#     Type: String
+#     Default: Development
+#     AllowedValues:
+#       - Development
+#       - Staging
+#       - Production
+
+# Globals:
+#   Function:
+#     Runtime: python3.11
+#     Timeout: 30
+#     MemorySize: 128
+#     Environment:
+#       Variables:
+#         LOG_LEVEL: INFO
+#         ENVIRONMENT: !Ref Environment
+#     LoggingConfig:
+#       LogFormat: JSON
+#       ApplicationLogLevel: INFO
+#     Tags:
+#       Environment: !Ref Environment
+#       Purpose: test
+#       Owner: rohan.khanal
+#       Project: GUMP_NOW
+
+# Resources:
+#   SharedLayer:
+#     Type: AWS::Serverless::LayerVersion
+#     Properties:
+#       LayerName: !Sub "shared-layer-${Environment}"
+#       Description: Shared utilities for all lambdas
+#       ContentUri: ../layers/shared
+#       CompatibleRuntimes:
+#         - python3.11
+#       RetentionPolicy: Retain
+#     Tags:
+#       Environment: !Ref Environment
+#       Purpose: test
+#       Owner: rohan.khanal
+#       Project: GUMP_NOW
+#       Name: !Sub "shared-layer-${Environment}"
+
+#   Lambda1Function:
+#     Type: AWS::Serverless::Function
+#     Properties:
+#       FunctionName: !Sub "lambda1-${Environment}"
+#       CodeUri: .
+#       Handler: app.lambda_handler
+#       Layers:
+#         - !Ref SharedLayer
+#       Policies:
+#         - AWSLambdaBasicExecutionRole
+#       Tags:
+#         Name: !Sub "lambda1-${Environment}"
+#         Environment: !Ref Environment
+#         Purpose: test
+#         Owner: rohan.khanal
+#         Project: GUMP_NOW
+
+#   Lambda1LogGroup:
+#     Type: AWS::Logs::LogGroup
+#     Properties:
+#       LogGroupName: !Sub "/aws/lambda/lambda1-${Environment}"
+#       RetentionInDays: 7
+
+# Outputs:
+#   Lambda1FunctionArn:
+#     Value: !GetAtt Lambda1Function.Arn
+#   SharedLayerArn:
+#     Value: !Ref SharedLayer
+
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: Lambda1 stack (SAM) - monorepo
@@ -30,12 +107,12 @@ Globals:
       Project: GUMP_NOW
 
 Resources:
-  SharedLayer:
+  Lambda1DepsLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
-      LayerName: !Sub "shared-layer-${Environment}"
-      Description: Shared utilities for all lambdas
-      ContentUri: ../layers/shared
+      LayerName: !Sub "lambda1-deps-${Environment}"
+      Description: Lambda1 dependencies layer
+      ContentUri: ./layers/lib
       CompatibleRuntimes:
         - python3.11
       RetentionPolicy: Retain
@@ -44,7 +121,7 @@ Resources:
       Purpose: test
       Owner: rohan.khanal
       Project: GUMP_NOW
-      Name: !Sub "shared-layer-${Environment}"
+      Name: !Sub "lambda1-deps-${Environment}"
 
   Lambda1Function:
     Type: AWS::Serverless::Function
@@ -53,7 +130,7 @@ Resources:
       CodeUri: .
       Handler: app.lambda_handler
       Layers:
-        - !Ref SharedLayer
+        - !Ref Lambda1DepsLayer
       Policies:
         - AWSLambdaBasicExecutionRole
       Tags:
@@ -72,74 +149,5 @@ Resources:
 Outputs:
   Lambda1FunctionArn:
     Value: !GetAtt Lambda1Function.Arn
-  SharedLayerArn:
-    Value: !Ref SharedLayer
-
-# AWSTemplateFormatVersion: '2010-09-09'
-# Transform: AWS::Serverless-2016-10-31
-# Description: Lambda1 stack (SAM) - monorepo
-
-# Parameters:
-#   Environment:
-#     Type: String
-#     Default: Development
-#     AllowedValues:
-#       - Development
-#       - Staging
-#       - Production
-
-# Globals:
-#   Function:
-#     Runtime: python3.11
-#     Timeout: 30
-#     MemorySize: 128
-#     Environment:
-#       Variables:
-#         LOG_LEVEL: INFO
-#         ENVIRONMENT: !Ref Environment
-#     Tags:
-#       Environment: !Ref Environment
-#       Purpose: test
-#       Owner: rohan.khanal
-#       Project: GUMP_NOW
-
-# Resources:
-#   SharedLayer:
-#     Type: AWS::Serverless::LayerVersion
-#     Properties:
-#       LayerName: !Sub 'shared-layer-${Environment}'
-#       Description: Shared utilities for all lambdas
-#       ContentUri: ../layers/shared
-#       CompatibleRuntimes:
-#         - python3.11
-#       RetentionPolicy: Retain
-
-#     Tags:
-#       Environment: !Ref Environment
-#       Purpose: test
-#       Owner: rohan.khanal
-#       Project: GUMP_NOW
-#       Name: !Sub 'shared-layer-${Environment}'
-
-#   Lambda1Function:
-#     Type: AWS::Serverless::Function
-#     Properties:
-#       FunctionName: !Sub 'lambda1-${Environment}'
-#       CodeUri: .
-#       Handler: app.lambda_handler
-#       Layers:
-#         - !Ref SharedLayer
-#       Policies:
-#         - AWSLambdaBasicExecutionRole
-#       Tags:
-#         Name: !Sub 'lambda1-${Environment}'
-#         Environment: !Ref Environment
-#         Purpose: test
-#         Owner: rohan.khanal
-#         Project: GUMP_NOW
-
-# Outputs:
-#   Lambda1FunctionArn:
-#     Value: !GetAtt Lambda1Function.Arn
-#   SharedLayerArn:
-#     Value: !Ref SharedLayer
+  Lambda1DepsLayerArn:
+    Value: !Ref Lambda1DepsLayer

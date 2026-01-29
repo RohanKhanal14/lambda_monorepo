@@ -1,3 +1,75 @@
+# version: 0.2
+
+# phases:
+#   install:
+#     runtime-versions:
+#       python: 3.11
+#     commands:
+#       - pip install --upgrade pip
+#       - pip install aws-sam-cli cfn-lint
+
+#   pre_build:
+#     commands:
+#       - cfn-lint lambda2/template.yaml
+#       - sam validate -t lambda2/template.yaml
+
+#   build:
+#     commands:
+#       - sam build --use-container --template-file lambda2/template.yaml
+#       - sam package
+#         --template-file .aws-sam/build/template.yaml
+#         --s3-bucket $S3_BUCKET
+#         --s3-prefix lambda2/$CODEBUILD_RESOLVED_SOURCE_VERSION
+#         --output-template-file packaged.yaml
+#         --region $AWS_REGION
+      
+
+# artifacts:
+#   files:
+#     - packaged.yaml
+
+# cache:
+#   paths:
+#     - '/root/.cache/pip/**/*'
+
+
+# version: 0.2
+
+# phases:
+#   install:
+#     runtime-versions:
+#       python: 3.11
+#     commands:
+#       - pip install --upgrade pip
+#       - pip install aws-sam-cli cfn-lint
+
+#   pre_build:
+#     commands:
+#       - cfn-lint lambda1/template.yaml
+#       - sam validate -t lambda1/template.yaml
+
+#   build:
+#     commands:
+#       - sam build --use-container --template-file lambda1/template.yaml
+#       - sam package
+#         --template-file .aws-sam/build/template.yaml
+#         --s3-bucket $S3_BUCKET
+#         --s3-prefix lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION
+#         --output-template-file packaged.yaml
+#         --region $AWS_REGION
+#       - echo "==== packaged.yaml CodeUri S3 references ===="
+#       - grep -n "S3Bucket\|S3Key\|s3://" -n packaged.yaml || true
+#       - aws s3 ls "s3://$S3_BUCKET/lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION/" --recursive || true
+#       - echo "==== List uploaded artifacts in S3 prefix ===="
+
+# artifacts:
+#   files:
+#     - packaged.yaml
+
+# cache:
+#   paths:
+#     - '/root/.cache/pip/**/*'
+
 version: 0.2
 
 phases:
@@ -5,24 +77,67 @@ phases:
     runtime-versions:
       python: 3.11
     commands:
+      - echo "Installing dependencies..."
       - pip install --upgrade pip
       - pip install aws-sam-cli cfn-lint
 
   pre_build:
     commands:
-      - cfn-lint lambda2/template.yaml
-      - sam validate -t lambda2/template.yaml
+      - echo "======== Pre-build Phase ========"
+      - echo "Copying shared modules to Lambda1..."
+      - cp ../shared/python/logger.py .
+      - cp ../shared/python/utils.py .
+      - echo "✓ Shared modules copied"
+      
+      - echo "Validating CloudFormation template..."
+      - cfn-lint lambda1/template.yaml
+      - echo "✓ CFN Lint passed"
+      
+      - echo "Validating SAM template..."
+      - sam validate -t lambda1/template.yaml
+      - echo "✓ SAM validation passed"
+      
+      - echo "Checking Python syntax..."
+      - python -m py_compile app.py logger.py utils.py
+      - echo "✓ Python syntax valid"
 
   build:
     commands:
+      - echo "======== Build Phase ========"
+      - echo "Building SAM application..."
       - sam build --use-container --template-file lambda2/template.yaml
+      - echo "✓ SAM build completed"
+      
+      - echo "Packaging SAM application..."
       - sam package
         --template-file .aws-sam/build/template.yaml
         --s3-bucket $S3_BUCKET
-        --s3-prefix lambda2/$CODEBUILD_RESOLVED_SOURCE_VERSION
+        --s3-prefix lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION
         --output-template-file packaged.yaml
         --region $AWS_REGION
+      - echo "✓ SAM package completed"
       
+      - echo "======== Artifact Verification ========"
+      - echo "Checking packaged.yaml for S3 references..."
+      - grep -n "S3Bucket\|S3Key" packaged.yaml || echo "No S3 references found"
+      
+      - echo "Listing uploaded artifacts in S3..."
+      - aws s3 ls "s3://$S3_BUCKET/lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION/" --recursive || echo "No artifacts found in S3"
+      
+      - echo "======== Build Summary ========"
+      - echo "Build Status: SUCCESS"
+      - echo "Template: packaged.yaml"
+      - echo "S3 Bucket: $S3_BUCKET"
+      - echo "S3 Prefix: lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION"
+
+  post_build:
+    commands:
+      - echo "======== Post-build Phase ========"
+      - echo "Validating packaged template..."
+      - cfn-lint packaged.yaml
+      - echo "✓ Packaged template validated"
+      
+      - echo "Build Pipeline Completed Successfully!"
 
 artifacts:
   files:
