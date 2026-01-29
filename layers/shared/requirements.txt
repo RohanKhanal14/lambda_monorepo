@@ -1,3 +1,4 @@
 # Shared Layer Dependencies
 # These are packaged into the layer and available to all Lambda functions
 postgresql==2.9.8
+requests==2.31.0
