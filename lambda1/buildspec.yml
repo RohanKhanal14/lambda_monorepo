@@ -65,7 +65,7 @@ phases:
     commands:
       # 1) Generate hash of requirements.txt
       - LAYER_HASH=$(md5sum lambda1/layers/lib/requirements.txt | awk '{print $1}')
-      - echo "Layer hash: $LAYER_HASH"
+      - echo "Layer hash=$LAYER_HASH"
       - echo "LAYER_HASH=$LAYER_HASH" >> /tmp/env.txt
       
       # 2) Check if layer version already exists
