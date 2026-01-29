@@ -50,8 +50,7 @@ phases:
     commands:
       - echo "======== Pre-build Phase ========"
       - echo "Copying shared modules to Lambda1..."
-      - cp ../shared/python/logger.py .
-      - cp ../shared/python/utils.py .
+      - cp -r ../shared/* .
       - echo "✓ Shared modules copied"
       
       - echo "Setting up layer requirements..."
