@@ -89,11 +89,11 @@ phases:
       - echo "Listing uploaded artifacts in S3..."
       - aws s3 ls "s3://$S3_BUCKET/lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION/" --recursive || echo "No artifacts found in S3"
       
-      - echo "======== Build Summary ========"
-      - echo "Build Status: SUCCESS"
-      - echo "Template: packaged.yaml"
-      - echo "S3 Bucket: $S3_BUCKET"
-      - echo "S3 Prefix: lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION"
+      # - echo "======== Build Summary ========"
+      # - echo "Build Status: SUCCESS"
+      # - echo "Template: packaged.yaml"
+      # - echo "S3 Bucket: $S3_BUCKET"
+      # - echo "S3 Prefix: lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION"
 
   post_build:
     commands:
