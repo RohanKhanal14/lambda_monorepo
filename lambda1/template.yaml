@@ -111,11 +111,13 @@ Resources:
     Type: AWS::Serverless::LayerVersion
     Properties:
       LayerName: !Sub "lambda1-deps-${Environment}"
-      Description: Lambda1 dependencies layer
-      ContentUri: ./layers/lib
+      Description: Lambda1 dependencies layer (built from requirements.txt)
+      ContentUri: layers/lib
       CompatibleRuntimes:
         - python3.11
       RetentionPolicy: Retain
+    Metadata:
+      BuildMethod: python3.11
     Tags:
       Environment: !Ref Environment
       Purpose: test
