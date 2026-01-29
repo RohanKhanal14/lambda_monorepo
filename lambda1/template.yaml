@@ -1,12 +1,15 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: Lambda1 stack (SAM) - monorepo
 
 Parameters:
   Environment:
     Type: String
-    Default: dev
-    AllowedValues: [dev, staging, prod]
+    Default: Development
+    AllowedValues:
+      - Development
+      - Staging
+      - Production
 
 Globals:
   Function:
@@ -17,22 +20,36 @@ Globals:
       Variables:
         LOG_LEVEL: INFO
         ENVIRONMENT: !Ref Environment
+    LoggingConfig:
+      LogFormat: JSON
+      ApplicationLogLevel: INFO
+    Tags:
+      Environment: !Ref Environment
+      Purpose: test
+      Owner: rohan.khanal
+      Project: GUMP_NOW
 
 Resources:
   SharedLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
-      LayerName: !Sub 'shared-layer-${Environment}'
+      LayerName: !Sub "shared-layer-${Environment}"
       Description: Shared utilities for all lambdas
       ContentUri: ../layers/shared
       CompatibleRuntimes:
         - python3.11
-      RetentionPolicy: Delete
+      RetentionPolicy: Retain
+    Tags:
+      Environment: !Ref Environment
+      Purpose: test
+      Owner: rohan.khanal
+      Project: GUMP_NOW
+      Name: !Sub "shared-layer-${Environment}"
 
   Lambda1Function:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub 'lambda1-${Environment}'
+      FunctionName: !Sub "lambda1-${Environment}"
       CodeUri: .
       Handler: app.lambda_handler
       Layers:
@@ -40,7 +57,7 @@ Resources:
       Policies:
         - AWSLambdaBasicExecutionRole
       Tags:
-        Name: lambda1
+        Name: !Sub "lambda1-${Environment}"
         Environment: !Ref Environment
         Purpose: test
         Owner: rohan.khanal
@@ -49,7 +66,7 @@ Resources:
   Lambda1LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub '/aws/lambda/${Lambda1Function}'
+      LogGroupName: !Sub "/aws/lambda/lambda1-${Environment}"
       RetentionInDays: 7
 
 Outputs:
@@ -96,7 +113,7 @@ Outputs:
 #       CompatibleRuntimes:
 #         - python3.11
 #       RetentionPolicy: Retain
-      
+
 #     Tags:
 #       Environment: !Ref Environment
 #       Purpose: test
