@@ -1,3 +1,55 @@
+version: 0.2
+
+phases:
+  # install:
+  #   runtime-versions:
+  #     python: 3.11
+  #   commands:
+  #     - python --version
+  #     - pip install --upgrade pip
+  #     - pip install aws-sam-cli cfn-lint
+
+  pre_build:
+    commands:
+      # 1) Bundle shared code into lambda folder (so CodeUri: . includes it)
+      - rm -rf lambda1/shared
+      - mkdir -p lambda1/shared
+      - rsync -a --delete shared/ lambda1/shared/
+
+      # 2) Lint/validate
+      - cfn-lint lambda1/template.yaml
+      - sam validate -t lambda1/template.yaml
+
+  build:
+    commands:
+      # Build (this will also build the layer by running pip on layers/lib/requirements.txt)
+      - sam build --use-container --template-file lambda1/template.yaml
+
+      # Package
+      - sam package
+        --template-file .aws-sam/build/template.yaml
+        --s3-bucket $S3_BUCKET
+        --s3-prefix lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION
+        --output-template-file packaged.yaml
+        --region $AWS_REGION
+
+      - echo "==== packaged.yaml CodeUri S3 references ===="
+      - grep -n "S3Bucket\\|S3Key\\|s3://" -n packaged.yaml || true
+      - echo "==== List uploaded artifacts in S3 prefix ===="
+      - aws s3 ls "s3://$S3_BUCKET/lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION/" --recursive || true
+
+artifacts:
+  files:
+    - packaged.yaml
+
+cache:
+  paths:
+    - "/root/.cache/pip/**/*"
+    - ".aws-sam/**/*"
+
+
+# layer test 
+
 # version: 0.2
 
 # phases:
@@ -11,32 +63,48 @@
 
 #   pre_build:
 #     commands:
-#       # 1) Bundle shared code into lambda folder (so CodeUri: . includes it)
+#       # 1) Generate hash of requirements.txt
+#       - LAYER_HASH=$(md5sum lambda1/layers/lib/requirements.txt | awk '{print $1}')
+#       - echo "Layer hash=$LAYER_HASH"
+#       - echo "LAYER_HASH=$LAYER_HASH" >> /tmp/env.txt
+      
+#       # 2) Check if layer version already exists
+#       - |
+#         EXISTING_VERSION=$(aws lambda list-layer-versions \
+#           --layer-name "lambda1-deps-${ENVIRONMENT}" \
+#           --query "LayerVersions[0].Description" \
+#           --output text 2>/dev/null || echo "")
+#         echo "Existing version description: $EXISTING_VERSION"
+#         if [ "$EXISTING_VERSION" == "hash:$LAYER_HASH" ]; then
+#           echo "No changes in layer, skipping layer rebuild"
+#           echo "SKIP_LAYER_BUILD=true" >> /tmp/env.txt
+#         fi
+      
+#       # 3) Bundle shared code
 #       - rm -rf lambda1/shared
 #       - mkdir -p lambda1/shared
 #       - rsync -a --delete shared/ lambda1/shared/
 
-#       # 2) Lint/validate
+#       # 4) Lint/validate
 #       - cfn-lint lambda1/template.yaml
 #       - sam validate -t lambda1/template.yaml
 
 #   build:
 #     commands:
-#       # Build (this will also build the layer by running pip on layers/lib/requirements.txt)
-#       - sam build --use-container --template-file lambda1/template.yaml
+#       - source /tmp/env.txt
+#       - |
+#         if [ "$SKIP_LAYER_BUILD" != "true" ]; then
+#           sam build --use-container --template-file lambda1/template.yaml
+#         else
+#           echo "Skipping layer build - no changes detected"
+#         fi
 
-#       # Package
 #       - sam package
 #         --template-file .aws-sam/build/template.yaml
 #         --s3-bucket $S3_BUCKET
 #         --s3-prefix lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION
 #         --output-template-file packaged.yaml
 #         --region $AWS_REGION
-
-#       - echo "==== packaged.yaml CodeUri S3 references ===="
-#       - grep -n "S3Bucket\\|S3Key\\|s3://" -n packaged.yaml || true
-#       - echo "==== List uploaded artifacts in S3 prefix ===="
-#       - aws s3 ls "s3://$S3_BUCKET/lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION/" --recursive || true
 
 # artifacts:
 #   files:
@@ -46,71 +114,3 @@
 #   paths:
 #     - "/root/.cache/pip/**/*"
 #     - ".aws-sam/**/*"
-
-
-# layer test 
-
-version: 0.2
-
-phases:
-  install:
-    runtime-versions:
-      python: 3.11
-    commands:
-      - python --version
-      - pip install --upgrade pip
-      - pip install aws-sam-cli cfn-lint
-
-  pre_build:
-    commands:
-      # 1) Generate hash of requirements.txt
-      - LAYER_HASH=$(md5sum lambda1/layers/lib/requirements.txt | awk '{print $1}')
-      - echo "Layer hash=$LAYER_HASH"
-      - echo "LAYER_HASH=$LAYER_HASH" >> /tmp/env.txt
-      
-      # 2) Check if layer version already exists
-      - |
-        EXISTING_VERSION=$(aws lambda list-layer-versions \
-          --layer-name "lambda1-deps-${ENVIRONMENT}" \
-          --query "LayerVersions[0].Description" \
-          --output text 2>/dev/null || echo "")
-        echo "Existing version description: $EXISTING_VERSION"
-        if [ "$EXISTING_VERSION" == "hash:$LAYER_HASH" ]; then
-          echo "No changes in layer, skipping layer rebuild"
-          echo "SKIP_LAYER_BUILD=true" >> /tmp/env.txt
-        fi
-      
-      # 3) Bundle shared code
-      - rm -rf lambda1/shared
-      - mkdir -p lambda1/shared
-      - rsync -a --delete shared/ lambda1/shared/
-
-      # 4) Lint/validate
-      - cfn-lint lambda1/template.yaml
-      - sam validate -t lambda1/template.yaml
-
-  build:
-    commands:
-      - source /tmp/env.txt
-      - |
-        if [ "$SKIP_LAYER_BUILD" != "true" ]; then
-          sam build --use-container --template-file lambda1/template.yaml
-        else
-          echo "Skipping layer build - no changes detected"
-        fi
-
-      - sam package
-        --template-file .aws-sam/build/template.yaml
-        --s3-bucket $S3_BUCKET
-        --s3-prefix lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION
-        --output-template-file packaged.yaml
-        --region $AWS_REGION
-
-artifacts:
-  files:
-    - packaged.yaml
-
-cache:
-  paths:
-    - "/root/.cache/pip/**/*"
-    - ".aws-sam/**/*"
