@@ -1,6 +1,6 @@
 import json
 import requests
-from logger import get_logger
+from shared.logger import get_logger
 
 logger = get_logger(__name__)
 
