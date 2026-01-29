@@ -54,6 +54,11 @@ phases:
       - cp ../shared/python/utils.py .
       - echo "✓ Shared modules copied"
       
+      - echo "Setting up layer requirements..."
+      - mkdir -p lambda1/layers/lib
+      - cp lambda1/requirements.txt lambda1/layers/lib/requirements.txt
+      - echo "✓ Layer requirements configured"
+      
       - echo "Validating CloudFormation template..."
       - cfn-lint lambda1/template.yaml
       - echo "✓ CFN Lint passed"
@@ -74,17 +79,12 @@ phases:
       - echo "✓ SAM build completed"
       
       - echo "Packaging SAM application..."
-      - sam package
-        --template-file .aws-sam/build/template.yaml
-        --s3-bucket $S3_BUCKET
-        --s3-prefix lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION
-        --output-template-file packaged.yaml
-        --region $AWS_REGION
+      - sam package --template-file .aws-sam/build/template.yaml --s3-bucket $S3_BUCKET --s3-prefix lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION --output-template-file packaged.yaml --region $AWS_REGION
       - echo "✓ SAM package completed"
       
       - echo "======== Artifact Verification ========"
       - echo "Checking packaged.yaml for S3 references..."
-      - grep -n "S3Bucket\|S3Key" packaged.yaml || echo "No S3 references found"
+      - grep "S3Bucket\|S3Key" packaged.yaml || echo "No S3 references found"
       
       - echo "Listing uploaded artifacts in S3..."
       - aws s3 ls "s3://$S3_BUCKET/lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION/" --recursive || echo "No artifacts found in S3"
@@ -101,13 +101,15 @@ phases:
       - echo "Validating packaged template..."
       - cfn-lint packaged.yaml
       - echo "✓ Packaged template validated"
-      
       - echo "Build Pipeline Completed Successfully!"
 
 artifacts:
   files:
     - packaged.yaml
+  name: Lambda1BuildArtifacts
+  discard-paths: yes
 
 cache:
   paths:
     - '/root/.cache/pip/**/*'
+    - '.aws-sam/**/*'
