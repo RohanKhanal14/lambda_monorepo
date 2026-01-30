@@ -93,7 +93,7 @@ phases:
 
           sam deploy \
             --template-file packaged-role.yaml \
-            --stack-name "lambda1-stack" \
+            --stack-name "lambda1-role-${ENVIRONMENT}" \
             --parameter-overrides "Environment=$ENVIRONMENT" "RoleHash=$ROLE_HASH" \
             --capabilities CAPABILITY_NAMED_IAM \
             --region "$AWS_REGION" \
