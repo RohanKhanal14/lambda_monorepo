@@ -47,7 +47,7 @@ Resources:
   Lambda1DepsLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
-      LayerName: !Sub "lambda1-deps-${Environment}-${LayerContentHash}"
+      LayerName: !Sub "lambda1-deps-${Environment}"
       Description: !Sub "Lambda1 dependencies - hash:${LayerContentHash}"
       ContentUri: layers/lib
       CompatibleRuntimes:
