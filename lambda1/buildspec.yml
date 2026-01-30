@@ -29,7 +29,7 @@ phases:
           --query "Role.Tags[?Key=='RoleHash'].Value" \
           --output text 2>/dev/null || echo "none")
         echo "Existing role hash: $EXISTING_ROLE_HASH"
-        if [ "$EXISTING_ROLE_HASH" == "$ROLE_HASH" ]; then
+        if [ "$EXISTING_ROLE_HASH" = "$ROLE_HASH" ]; then
           echo "SKIP_ROLE_DEPLOY=true" >> /tmp/build.env
           echo "Role unchanged, skipping role deployment"
         else
@@ -44,6 +44,7 @@ phases:
           --query "LayerVersions[0].Version" \
           --output text 2>/dev/null || echo "none")
         echo "Layer status: $LAYER_EXISTS"
+        LAYER_EXISTS=$(echo "$LAYER_EXISTS" | tr '[:upper:]' '[:lower:]')
         if [ "$LAYER_EXISTS" != "none" ]; then
           echo "SKIP_LAYER_DEPLOY=true" >> /tmp/build.env
           echo "Layer already exists, skipping layer deployment"
@@ -67,7 +68,7 @@ phases:
 
   build:
     commands:
-      - source /tmp/build.env
+      - . /tmp/build.env
       
       # Deploy role only if template changed
       - |
