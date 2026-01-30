@@ -357,8 +357,8 @@ phases:
           exit 1
         fi
 
-      - |
       # Deploy function stack ALWAYS
+      - |
         echo "=== Deploying FUNCTION stack ==="
         sam build --use-container --template-file lambda1/template.yaml
         sam package \
