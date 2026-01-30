@@ -63,14 +63,15 @@ Parameters:
   Environment:
     Type: String
     Default: Development
-    AllowedValues:
-      - Development
-      - Staging
-      - Production
+    AllowedValues: [Development, Staging, Production]
 
   RoleHash:
     Type: String
     Description: Hash of role template for change detection
+
+  Lambda1PipelineName:
+    Type: String
+    Default: lambda1-pipeline
 
 Resources:
   Lambda1ExecutionRole:
@@ -83,21 +84,32 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - sts:AssumeRole
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
 
-      # Basic logging managed policy
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
-      # Example inline policy block (empty by default - safe)
       Policies:
-        - PolicyName: !Sub "lambda1-inline-${Environment}"
+        - PolicyName: !Sub "lambda1-ssm-read-${Environment}"
           PolicyDocument:
             Version: "2012-10-17"
-            Statement: []
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/gump/*"
+
+        - PolicyName: !Sub "lambda1-start-pipeline-${Environment}"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codepipeline:StartPipelineExecution
+                Resource: !Sub "arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${Lambda1PipelineName}"
 
       Tags:
         - Key: Environment
