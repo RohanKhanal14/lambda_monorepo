@@ -108,6 +108,20 @@ phases:
           echo "Skipping role deployment - template unchanged"
         fi
       
+      # Verify role export exists
+      - |
+        echo "=== Verifying Role Export ==="
+        ROLE_EXPORT=$(aws cloudformation list-exports \
+          --region $AWS_REGION \
+          --query "Exports[?Name=='lambda1-execution-role-arn-${ENVIRONMENT}'].ExportingStackId" \
+          --output text 2>/dev/null || echo "none")
+        echo "Role export status: $ROLE_EXPORT"
+        if [ "$ROLE_EXPORT" = "none" ]; then
+          echo "ERROR: Role export not found! Role stack may have failed to deploy."
+          exit 1
+        fi
+        echo "Role export found"
+      
       # Deploy layer only if changed
       - |
         if [ "$SKIP_LAYER_DEPLOY" != "true" ]; then
@@ -129,9 +143,25 @@ phases:
             --no-fail-on-empty-changeset
           
           echo "Layer deployment complete"
+          sleep 5
+          echo "Waiting for exports to be available..."
         else
           echo "Skipping layer deployment - requirements.txt unchanged"
         fi
+      
+      # Verify layer export exists before deploying function
+      - |
+        echo "=== Verifying Layer Export ==="
+        LAYER_EXPORT=$(aws cloudformation list-exports \
+          --region $AWS_REGION \
+          --query "Exports[?Name=='lambda1-deps-layer-arn-${ENVIRONMENT}'].ExportingStackId" \
+          --output text 2>/dev/null || echo "none")
+        echo "Layer export status: $LAYER_EXPORT"
+        if [ "$LAYER_EXPORT" = "none" ]; then
+          echo "ERROR: Layer export not found! Layer stack may have failed to deploy."
+          exit 1
+        fi
+        echo "Layer export found, proceeding with function deployment"
       
       # Always deploy function
       - echo "=== Building and Deploying Lambda Function ==="
