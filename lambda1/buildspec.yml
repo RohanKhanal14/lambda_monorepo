@@ -13,7 +13,7 @@ phases:
     commands:
       # 1) Generate hash of layer requirements.txt
       - LAYER_HASH=$(md5sum lambda1/layers/lib/requirements.txt | awk '{print $1}' | cut -c1-8)
-      - echo "Layer Hash: $LAYER_HASH"
+      - echo "Layer Hash=$LAYER_HASH"
       - echo "LAYER_HASH=$LAYER_HASH" >> /tmp/build.env
       
       # 2) Generate hash of role template
