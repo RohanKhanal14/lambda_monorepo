@@ -210,19 +210,20 @@ phases:
       - python --version
       - pip install --upgrade pip
       - pip install aws-sam-cli
-      - echo "ENVIRONMENT=$ENVIRONMENT"
-      - echo "AWS_REGION=$AWS_REGION"
-      - echo "S3_BUCKET=$S3_BUCKET"
 
   pre_build:
     commands:
       - set -euo pipefail
 
-      # Hashes for change detection
+      - echo "ENVIRONMENT=$ENVIRONMENT"
+      - echo "AWS_REGION=$AWS_REGION"
+      - echo "S3_BUCKET=$S3_BUCKET"
+
+      # Hashes
       - LAYER_HASH=$(md5sum lambda1/layers/lib/requirements.txt | awk '{print $1}' | cut -c1-8)
       - ROLE_HASH=$(md5sum lambda1/template-role.yaml | awk '{print $1}' | cut -c1-8)
 
-      # Decide role deploy needed (based on IAM role tag)
+      # Decide role skip (tag-based)
       - |
         ROLE_NAME="lambda1-execution-role-${ENVIRONMENT}"
         EXISTING_ROLE_HASH="$(aws iam get-role \
@@ -237,7 +238,7 @@ phases:
         fi
         echo "SKIP_ROLE_DEPLOY=$SKIP_ROLE_DEPLOY"
 
-      # Decide layer deploy needed (compare stack parameter)
+      # Decide layer skip (stack param-based)
       - |
         LAYER_STACK_NAME="lambda1-layer-${ENVIRONMENT}"
         STACK_EXISTS="$(aws cloudformation describe-stacks \
@@ -252,6 +253,7 @@ phases:
             --region "$AWS_REGION" \
             --query "Stacks[0].Parameters[?ParameterKey=='LayerContentHash'].ParameterValue | [0]" \
             --output text 2>/dev/null || echo "none")"
+
           if [ "$EXISTING_LAYER_HASH" = "$LAYER_HASH" ]; then
             SKIP_LAYER_DEPLOY=true
           else
@@ -262,7 +264,7 @@ phases:
         fi
         echo "SKIP_LAYER_DEPLOY=$SKIP_LAYER_DEPLOY"
 
-      # Bundle shared/ into lambda1/
+      # Bundle shared into lambda1/
       - rm -rf lambda1/shared
       - mkdir -p lambda1/shared
       - rsync -a --delete shared/ lambda1/shared/
@@ -276,45 +278,39 @@ phases:
     commands:
       - set -euo pipefail
 
-      # -----------------------------
-      # TemplateConfiguration JSONs (CORRECT SYNTAX for CodePipeline CFN action)
-      # -----------------------------
+      # Correct TemplateConfiguration JSON files for CodePipeline CFN actions
       - |
         cat > role-config.json <<EOF
-{
-  "Parameters": {
-    "Environment": "$ENVIRONMENT",
-    "RoleHash": "$ROLE_HASH"
-  }
-}
-EOF
+        {
+          "Parameters": {
+            "Environment": "${ENVIRONMENT}",
+            "RoleHash": "${ROLE_HASH}"
+          }
+        }
+        EOF
 
       - |
         cat > layer-config.json <<EOF
-{
-  "Parameters": {
-    "Environment": "$ENVIRONMENT",
-    "LayerContentHash": "$LAYER_HASH"
-  }
-}
-EOF
+        {
+          "Parameters": {
+            "Environment": "${ENVIRONMENT}",
+            "LayerContentHash": "${LAYER_HASH}"
+          }
+        }
+        EOF
 
       - |
         cat > function-config.json <<EOF
-{
-  "Parameters": {
-    "Environment": "$ENVIRONMENT"
-  }
-}
-EOF
+        {
+          "Parameters": {
+            "Environment": "${ENVIRONMENT}"
+          }
+        }
+        EOF
 
-      # -----------------------------
-      # ROLE template (conditional -> otherwise NO-OP template)
-      # Output: lambda1-role.yaml
-      # -----------------------------
+      # ROLE template -> real or no-op
       - |
         if [ "$SKIP_ROLE_DEPLOY" != "true" ]; then
-          echo "=== BUILD/PACKAGE ROLE ==="
           sam build --use-container --template-file lambda1/template-role.yaml
           sam package \
             --template-file .aws-sam/build/template.yaml \
@@ -323,21 +319,16 @@ EOF
             --output-template-file lambda1-role.yaml \
             --region "$AWS_REGION"
         else
-          echo "=== ROLE unchanged -> writing NO-OP lambda1-role.yaml ==="
           cat > lambda1-role.yaml <<'EOF'
-AWSTemplateFormatVersion: '2010-09-09'
-Description: 'No-op role deploy (skipped)'
-Resources: {}
-EOF
+        AWSTemplateFormatVersion: '2010-09-09'
+        Description: 'No-op role deploy (skipped)'
+        Resources: {}
+        EOF
         fi
 
-      # -----------------------------
-      # LAYER template (conditional -> otherwise NO-OP template)
-      # Output: lambda1-layer.yaml
-      # -----------------------------
+      # LAYER template -> real or no-op
       - |
         if [ "$SKIP_LAYER_DEPLOY" != "true" ]; then
-          echo "=== BUILD/PACKAGE LAYER ==="
           sam build --use-container --template-file lambda1/template-layer.yaml
           sam package \
             --template-file .aws-sam/build/template.yaml \
@@ -346,20 +337,15 @@ EOF
             --output-template-file lambda1-layer.yaml \
             --region "$AWS_REGION"
         else
-          echo "=== LAYER unchanged -> writing NO-OP lambda1-layer.yaml ==="
           cat > lambda1-layer.yaml <<'EOF'
-AWSTemplateFormatVersion: '2010-09-09'
-Description: 'No-op layer deploy (skipped)'
-Resources: {}
-EOF
+        AWSTemplateFormatVersion: '2010-09-09'
+        Description: 'No-op layer deploy (skipped)'
+        Resources: {}
+        EOF
         fi
 
-      # -----------------------------
       # FUNCTION template ALWAYS
-      # Output: lambda1-package.yaml
-      # -----------------------------
       - |
-        echo "=== BUILD/PACKAGE FUNCTION (ALWAYS) ==="
         sam build --use-container --template-file lambda1/template.yaml
         sam package \
           --template-file .aws-sam/build/template.yaml \
