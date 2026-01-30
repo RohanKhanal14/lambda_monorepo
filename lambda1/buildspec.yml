@@ -3,7 +3,6 @@ version: 0.2
 phases:
   install:
     commands:
-      - which docker
       - docker --version
       - sam --version
 
