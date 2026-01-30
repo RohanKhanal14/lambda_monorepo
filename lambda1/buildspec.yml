@@ -357,17 +357,18 @@ phases:
           exit 1
         fi
 
+      - |
       # Deploy function stack ALWAYS
-      - echo "=== Deploying FUNCTION stack ==="
-      - sam build --use-container --template-file lambda1/template.yaml
-      - sam package \
+        echo "=== Deploying FUNCTION stack ==="
+        sam build --use-container --template-file lambda1/template.yaml
+        sam package \
         --template-file .aws-sam/build/template.yaml \
         --s3-bucket "$S3_BUCKET" \
         --s3-prefix "lambda1/function/$CODEBUILD_RESOLVED_SOURCE_VERSION" \
         --output-template-file packaged.yaml \
         --region "$AWS_REGION"
 
-      - sam deploy \
+        sam deploy \
         --template-file packaged.yaml \
         --stack-name "lambda1-${ENVIRONMENT}" \
         --parameter-overrides "Environment=$ENVIRONMENT" \
