@@ -123,7 +123,8 @@ phases:
       # Always deploy function
       - echo "=== Building and Deploying Lambda Function ==="
       - sam build --use-container --template-file lambda1/template.yaml
-      - sam package \
+      - |
+        sam package \
           --template-file .aws-sam/build/template.yaml \
           --s3-bucket $S3_BUCKET \
           --s3-prefix lambda1/function/$CODEBUILD_RESOLVED_SOURCE_VERSION \
