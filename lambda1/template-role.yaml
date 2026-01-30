@@ -1,6 +1,63 @@
+# AWSTemplateFormatVersion: "2010-09-09"
+# Transform: AWS::Serverless-2016-10-31
+# Description: Lambda1 IAM Role and Policies
+
+# Parameters:
+#   Environment:
+#     Type: String
+#     Default: Development
+#     AllowedValues:
+#       - Development
+#       - Staging
+#       - Production
+#   RoleHash:
+#     Type: String
+#     Description: Hash of role template for change detection
+
+# Resources:
+#   Lambda1ExecutionRole:
+#     Type: AWS::IAM::Role
+#     Properties:
+#       RoleName: !Sub "lambda1-execution-role-${Environment}"
+#       AssumeRolePolicyDocument:
+#         Version: "2012-10-17"
+#         Statement:
+#           - Effect: Allow
+#             Principal:
+#               Service: lambda.amazonaws.com
+#             Action: sts:AssumeRole
+#       ManagedPolicyArns:
+#         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+#       InlinePolicies:
+#         Lambda1CustomPolicy:
+#           Version: "2012-10-17"
+#           Statement:
+#             - Effect: Allow
+#               Action:
+#                 - logs:CreateLogGroup
+#                 - logs:CreateLogStream
+#                 - logs:PutLogEvents
+#               Resource: !Sub "arn:aws:logs:ap-south-1:031342435657:log-group:/aws/lambda/lambda1-${Environment}:*"
+#       Tags:
+#         - Key: Environment
+#           Value: !Ref Environment
+#         - Key: Purpose
+#           Value: test
+#         - Key: Owner
+#           Value: rohan.khanal
+#         - Key: Project
+#           Value: GUMP_NOW
+#         - Key: RoleHash
+#           Value: !Ref RoleHash
+# Outputs:
+#   ExecutionRoleArn:
+#     Value: !GetAtt Lambda1ExecutionRole.Arn
+#     Export:
+#       Name: !Sub "lambda1-execution-role-arn-${Environment}"
+
+
 AWSTemplateFormatVersion: "2010-09-09"
-Transform: AWS::Serverless-2016-10-31
-Description: Lambda1 IAM Role and Policies
+Description: Lambda1 IAM Role and Policies (exported)
 
 Parameters:
   Environment:
@@ -10,6 +67,7 @@ Parameters:
       - Development
       - Staging
       - Production
+
   RoleHash:
     Type: String
     Description: Hash of role template for change detection
@@ -19,41 +77,40 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub "lambda1-execution-role-${Environment}"
+
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+      # Basic logging managed policy
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      InlinePolicies:
-        Lambda1CustomPolicy:
-          Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: !Sub "arn:aws:logs:ap-south-1:031342435657:log-group:/aws/lambda/lambda1-${Environment}:*"
+
+      # Example inline policy block (empty by default - safe)
+      Policies:
+        - PolicyName: !Sub "lambda1-inline-${Environment}"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement: []
+
       Tags:
-        # - Key: Environment
-        #   Value: !Ref Environment
-        # - Key: Purpose
-        #   Value: test
-        # - Key: Owner
-        #   Value: rohan.khanal
-        # - Key: Project
-        #   Value: GUMP_NOW
-        # - Key: RoleHash
-        #   Value: !Ref RoleHash
-        Environment: !Ref Environment
-        Purpose: test
-        Owner: rohan.khanal
-        Project: GUMP_NOW
-        Name: !Ref RoleHash
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: test
+        - Key: Owner
+          Value: rohan.khanal
+        - Key: Project
+          Value: GUMP_NOW
+        - Key: RoleHash
+          Value: !Ref RoleHash
+
 Outputs:
   ExecutionRoleArn:
     Value: !GetAtt Lambda1ExecutionRole.Arn
