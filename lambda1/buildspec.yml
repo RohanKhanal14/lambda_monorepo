@@ -2,12 +2,10 @@ version: 0.2
 
 phases:
   install:
-    runtime-versions:
-      python: 3.11
     commands:
-      - python --version
-      - pip install --upgrade pip
-      - pip install aws-sam-cli cfn-lint
+      - which docker
+      - docker --version
+      - sam --version
 
   pre_build:
     commands:
