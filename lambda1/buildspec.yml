@@ -17,25 +17,25 @@ phases:
       - echo "LAYER_HASH=$LAYER_HASH" >> /tmp/build.env
       
       # 2) Generate hash of role template
-      # - ROLE_HASH=$(md5sum lambda1/template-role.yaml | awk '{print $1}' | cut -c1-8)
-      # - echo "Role Hash=$ROLE_HASH"
-      # - echo "ROLE_HASH=$ROLE_HASH" >> /tmp/build.env
+      - ROLE_HASH=$(md5sum lambda1/template-role.yaml | awk '{print $1}' | cut -c1-8)
+      - echo "Role Hash=$ROLE_HASH"
+      - echo "ROLE_HASH=$ROLE_HASH" >> /tmp/build.env
       
       # 3) Check if role has changed (by comparing tags)
-      # - |
-      #   ROLE_NAME="lambda1-execution-role-${ENVIRONMENT}"
-      #   EXISTING_ROLE_HASH=$(aws iam get-role \
-      #     --role-name $ROLE_NAME \
-      #     --query "Role.Tags[?Key=='RoleHash'].Value" \
-      #     --output text 2>/dev/null || echo "none")
-      #   echo "Existing role hash: $EXISTING_ROLE_HASH"
-      #   if [ "$EXISTING_ROLE_HASH" = "$ROLE_HASH" ]; then
-      #     echo "SKIP_ROLE_DEPLOY=true" >> /tmp/build.env
-      #     echo "Role unchanged, skipping role deployment"
-      #   else
-      #     echo "SKIP_ROLE_DEPLOY=false" >> /tmp/build.env
-      #     echo "Role changed, will deploy role"
-      #   fi
+      - |
+        ROLE_NAME="lambda1-execution-role-${ENVIRONMENT}"
+        EXISTING_ROLE_HASH=$(aws iam get-role \
+          --role-name $ROLE_NAME \
+          --query "Role.Tags[?Key=='RoleHash'].Value" \
+          --output text 2>/dev/null || echo "none")
+        echo "Existing role hash: $EXISTING_ROLE_HASH"
+        if [ "$EXISTING_ROLE_HASH" = "$ROLE_HASH" ]; then
+          echo "SKIP_ROLE_DEPLOY=true" >> /tmp/build.env
+          echo "Role unchanged, skipping role deployment"
+        else
+          echo "SKIP_ROLE_DEPLOY=false" >> /tmp/build.env
+          echo "Role changed, will deploy role"
+        fi
       
       # 4) Check if layer CloudFormation stack exists with this hash
       - |
@@ -84,43 +84,43 @@ phases:
       - . /tmp/build.env
       
       # Deploy role only if template changed
-      # - |
-      #   if [ "$SKIP_ROLE_DEPLOY" != "true" ]; then
-      #     echo "=== Deploying IAM Role and Policies ==="
-      #     sam build --use-container --template-file lambda1/template-role.yaml
-      #     sam package \
-      #       --template-file .aws-sam/build/template.yaml \
-      #       --s3-bucket $S3_BUCKET \
-      #       --s3-prefix lambda1/role/$CODEBUILD_RESOLVED_SOURCE_VERSION \
-      #       --output-template-file packaged-role.yaml \
-      #       --region $AWS_REGION
+      - |
+        if [ "$SKIP_ROLE_DEPLOY" != "true" ]; then
+          echo "=== Deploying IAM Role and Policies ==="
+          sam build --use-container --template-file lambda1/template-role.yaml
+          sam package \
+            --template-file .aws-sam/build/template.yaml \
+            --s3-bucket $S3_BUCKET \
+            --s3-prefix lambda1/role/$CODEBUILD_RESOLVED_SOURCE_VERSION \
+            --output-template-file packaged-role.yaml \
+            --region $AWS_REGION
           
-      #     sam deploy \
-      #       --template-file packaged-role.yaml \
-      #       --stack-name lambda1-role-${ENVIRONMENT} \
-      #       --parameter-overrides Environment=${ENVIRONMENT} RoleHash=$ROLE_HASH \
-      #       --capabilities CAPABILITY_NAMED_IAM \
-      #       --region $AWS_REGION \
-      #       --no-fail-on-empty-changeset
+          sam deploy \
+            --template-file packaged-role.yaml \
+            --stack-name lambda1-role-${ENVIRONMENT} \
+            --parameter-overrides Environment=${ENVIRONMENT} RoleHash=$ROLE_HASH \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --region $AWS_REGION \
+            --no-fail-on-empty-changeset
           
-      #     echo "Role deployment complete"
-      #   else
-      #     echo "Skipping role deployment - template unchanged"
-      #   fi
+          echo "Role deployment complete"
+        else
+          echo "Skipping role deployment - template unchanged"
+        fi
       
       # Verify role export exists
-      # - |
-      #   echo "=== Verifying Role Export ==="
-      #   ROLE_EXPORT=$(aws cloudformation list-exports \
-      #     --region $AWS_REGION \
-      #     --query "Exports[?Name=='lambda1-execution-role-arn-${ENVIRONMENT}'].ExportingStackId" \
-      #     --output text 2>/dev/null || echo "none")
-      #   echo "Role export status: $ROLE_EXPORT"
-      #   if [ "$ROLE_EXPORT" = "none" ]; then
-      #     echo "ERROR: Role export not found! Role stack may have failed to deploy."
-      #     exit 1
-      #   fi
-      #   echo "Role export found"
+      - |
+        echo "=== Verifying Role Export ==="
+        ROLE_EXPORT=$(aws cloudformation list-exports \
+          --region $AWS_REGION \
+          --query "Exports[?Name=='lambda1-execution-role-arn-${ENVIRONMENT}'].ExportingStackId" \
+          --output text 2>/dev/null || echo "none")
+        echo "Role export status: $ROLE_EXPORT"
+        if [ "$ROLE_EXPORT" = "none" ]; then
+          echo "ERROR: Role export not found! Role stack may have failed to deploy."
+          exit 1
+        fi
+        echo "Role export found"
       
       # Deploy layer only if changed
       - |
@@ -182,7 +182,7 @@ phases:
 artifacts:
   files:
     - packaged.yaml
-    # - packaged-role.yaml
+    - packaged-role.yaml
     - packaged-layer.yaml
 
 cache:

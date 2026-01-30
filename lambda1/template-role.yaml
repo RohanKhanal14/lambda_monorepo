@@ -37,19 +37,23 @@ Resources:
                 - logs:CreateLogGroup
                 - logs:CreateLogStream
                 - logs:PutLogEvents
-              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/lambda1-${Environment}:*"
+              Resource: !Sub "arn:aws:logs:ap-south-1:031342435657:log-group:/aws/lambda/lambda1-${Environment}:*"
       Tags:
-        - Key: Environment
-          Value: !Ref Environment
-        - Key: Purpose
-          Value: test
-        - Key: Owner
-          Value: rohan.khanal
-        - Key: Project
-          Value: GUMP_NOW
-        - Key: RoleHash
-          Value: !Ref RoleHash
-
+        # - Key: Environment
+        #   Value: !Ref Environment
+        # - Key: Purpose
+        #   Value: test
+        # - Key: Owner
+        #   Value: rohan.khanal
+        # - Key: Project
+        #   Value: GUMP_NOW
+        # - Key: RoleHash
+        #   Value: !Ref RoleHash
+        Environment: !Ref Environment
+        Purpose: test
+        Owner: rohan.khanal
+        Project: GUMP_NOW
+        Name: !Ref RoleHash
 Outputs:
   ExecutionRoleArn:
     Value: !GetAtt Lambda1ExecutionRole.Arn
