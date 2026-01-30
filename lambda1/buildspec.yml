@@ -291,7 +291,7 @@ phases:
             --region "$AWS_REGION" \
             --no-fail-on-empty-changeset
         else
-          echo "Skipping role deploy (no changes)"
+          echo "Skipping role deploy (no changes) ${ROLE_HASH}"
         fi
 
       # Ensure role export exists (retry loop to avoid eventual consistency)
