@@ -37,20 +37,33 @@ phases:
           echo "Role changed, will deploy role"
         fi
       
-      # 4) Check if layer already exists with this hash
+      # 4) Check if layer CloudFormation stack exists with this hash
       - |
-        LAYER_EXISTS=$(aws lambda list-layer-versions \
-          --layer-name "lambda1-deps-${ENVIRONMENT}-${LAYER_HASH}" \
-          --query "LayerVersions[0].Version" \
+        LAYER_STACK_NAME="lambda1-layer-${ENVIRONMENT}"
+        STACK_EXISTS=$(aws cloudformation describe-stacks \
+          --stack-name $LAYER_STACK_NAME \
+          --region $AWS_REGION \
+          --query "Stacks[0].StackId" \
           --output text 2>/dev/null || echo "none")
-        echo "Layer status: $LAYER_EXISTS"
-        LAYER_EXISTS=$(echo "$LAYER_EXISTS" | tr '[:upper:]' '[:lower:]')
-        if [ "$LAYER_EXISTS" != "none" ]; then
-          echo "SKIP_LAYER_DEPLOY=true" >> /tmp/build.env
-          echo "Layer already exists, skipping layer deployment"
+        echo "Layer stack status: $STACK_EXISTS"
+        
+        if [ "$STACK_EXISTS" != "none" ]; then
+          EXISTING_LAYER_HASH=$(aws cloudformation describe-stacks \
+            --stack-name $LAYER_STACK_NAME \
+            --region $AWS_REGION \
+            --query "Stacks[0].Parameters[?ParameterKey=='LayerContentHash'].ParameterValue" \
+            --output text 2>/dev/null || echo "none")
+          echo "Existing layer hash: $EXISTING_LAYER_HASH"
+          if [ "$EXISTING_LAYER_HASH" = "$LAYER_HASH" ]; then
+            echo "SKIP_LAYER_DEPLOY=true" >> /tmp/build.env
+            echo "Layer stack unchanged, skipping layer deployment"
+          else
+            echo "SKIP_LAYER_DEPLOY=false" >> /tmp/build.env
+            echo "Layer hash changed, will deploy layer"
+          fi
         else
           echo "SKIP_LAYER_DEPLOY=false" >> /tmp/build.env
-          echo "Layer not found, will deploy layer"
+          echo "Layer stack not found, will deploy layer"
         fi
 
       # 5) Bundle shared code into lambda folder
