@@ -233,8 +233,12 @@ phases:
 
         if [ "$EXISTING_ROLE_HASH" = "$ROLE_HASH" ]; then
           SKIP_ROLE_DEPLOY=true
+          echo "$EXISTING_ROLE_HASH"
+          echo "$ROLE_HASH"
         else
           SKIP_ROLE_DEPLOY=false
+          echo "$EXISTING_ROLE_HASH"
+          echo "$ROLE_HASH"
         fi
         echo "SKIP_ROLE_DEPLOY=$SKIP_ROLE_DEPLOY"
 
@@ -256,6 +260,8 @@ phases:
 
           if [ "$EXISTING_LAYER_HASH" = "$LAYER_HASH" ]; then
             SKIP_LAYER_DEPLOY=true
+            echo "$EXISTING_LAYER_HASH"
+            echo "$LAYER_HASH"
           else
             SKIP_LAYER_DEPLOY=false
           fi
