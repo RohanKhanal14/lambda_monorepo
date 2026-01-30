@@ -8,73 +8,69 @@
 #       - python --version
 #       - pip install --upgrade pip
 #       - pip install aws-sam-cli cfn-lint
+#       - echo "ENVIRONMENT=$ENVIRONMENT"
+#       - echo "AWS_REGION=$AWS_REGION"
+#       - echo "S3_BUCKET=$S3_BUCKET"
 
 #   pre_build:
 #     commands:
-#       # 1) Generate hash of layer requirements.txt
+#       # Hash layer requirements
 #       - LAYER_HASH=$(md5sum lambda1/layers/lib/requirements.txt | awk '{print $1}' | cut -c1-8)
-#       - echo "Layer Hash=$LAYER_HASH"
+#       - echo "LAYER_HASH=$LAYER_HASH"
 #       - echo "LAYER_HASH=$LAYER_HASH" >> /tmp/build.env
-      
-#       # 2) Generate hash of role template
+
+#       # Hash role template
 #       - ROLE_HASH=$(md5sum lambda1/template-role.yaml | awk '{print $1}' | cut -c1-8)
-#       - echo "Role Hash=$ROLE_HASH"
+#       - echo "ROLE_HASH=$ROLE_HASH"
 #       - echo "ROLE_HASH=$ROLE_HASH" >> /tmp/build.env
-      
-#       # 3) Check if role has changed (by comparing tags)
+
+#       # Decide if role deploy needed (based on existing role tag)
 #       - |
 #         ROLE_NAME="lambda1-execution-role-${ENVIRONMENT}"
-#         EXISTING_ROLE_HASH=$(aws iam get-role \
-#           --role-name $ROLE_NAME \
-#           --query "Role.Tags[?Key=='RoleHash'].Value" \
-#           --output text 2>/dev/null || echo "none")
-#         echo "Existing role hash: $EXISTING_ROLE_HASH"
+#         EXISTING_ROLE_HASH="$(aws iam get-role \
+#           --role-name "$ROLE_NAME" \
+#           --query "Role.Tags[?Key=='RoleHash'].Value | [0]" \
+#           --output text 2>/dev/null || echo "none")"
+
+#         echo "EXISTING_ROLE_HASH=$EXISTING_ROLE_HASH"
 #         if [ "$EXISTING_ROLE_HASH" = "$ROLE_HASH" ]; then
 #           echo "SKIP_ROLE_DEPLOY=true" >> /tmp/build.env
-#           echo "Role unchanged, skipping role deployment"
 #         else
 #           echo "SKIP_ROLE_DEPLOY=false" >> /tmp/build.env
-#           echo "Role changed, will deploy role"
 #         fi
-      
-#       # 4) Check if layer CloudFormation stack exists with this hash
+
+#       # Decide if layer deploy needed (compare stack parameter)
 #       - |
 #         LAYER_STACK_NAME="lambda1-layer-${ENVIRONMENT}"
-#         STACK_EXISTS=$(aws cloudformation describe-stacks \
-#           --stack-name $LAYER_STACK_NAME \
-#           --region $AWS_REGION \
+#         STACK_EXISTS="$(aws cloudformation describe-stacks \
+#           --stack-name "$LAYER_STACK_NAME" \
+#           --region "$AWS_REGION" \
 #           --query "Stacks[0].StackId" \
-#           --output text 2>/dev/null || echo "none")
-#         echo "Layer stack status: $STACK_EXISTS"
-        
+#           --output text 2>/dev/null || echo "none")"
+
 #         if [ "$STACK_EXISTS" != "none" ]; then
-#           EXISTING_LAYER_HASH=$(aws cloudformation describe-stacks \
-#             --stack-name $LAYER_STACK_NAME \
-#             --region $AWS_REGION \
-#             --query "Stacks[0].Parameters[?ParameterKey=='LayerContentHash'].ParameterValue" \
-#             --output text 2>/dev/null || echo "none")
-#           echo "Existing layer hash: $EXISTING_LAYER_HASH"
+#           EXISTING_LAYER_HASH="$(aws cloudformation describe-stacks \
+#             --stack-name "$LAYER_STACK_NAME" \
+#             --region "$AWS_REGION" \
+#             --query "Stacks[0].Parameters[?ParameterKey=='LayerContentHash'].ParameterValue | [0]" \
+#             --output text 2>/dev/null || echo "none")"
+#           echo "EXISTING_LAYER_HASH=$EXISTING_LAYER_HASH"
 #           if [ "$EXISTING_LAYER_HASH" = "$LAYER_HASH" ]; then
 #             echo "SKIP_LAYER_DEPLOY=true" >> /tmp/build.env
-#             echo "Layer stack unchanged, skipping layer deployment"
 #           else
 #             echo "SKIP_LAYER_DEPLOY=false" >> /tmp/build.env
-#             echo "Layer hash changed, will deploy layer"
 #           fi
 #         else
 #           echo "SKIP_LAYER_DEPLOY=false" >> /tmp/build.env
-#           echo "Layer stack not found, will deploy layer"
 #         fi
 
-#       # 5) Bundle shared code into lambda folder
+#       # Bundle shared into lambda1/
 #       - rm -rf lambda1/shared
 #       - mkdir -p lambda1/shared
 #       - rsync -a --delete shared/ lambda1/shared/
 
-#       # 6) Lint/validate all templates
-#       # - cfn-lint lambda1/template.yaml 
-#       # - cfn-lint lambda1/template-role.yaml
-#       # - cfn-lint lambda1/template-layer.yaml
+#       # Validate templates
+#       # - cfn-lint lambda1/template.yaml lambda1/template-role.yaml lambda1/template-layer.yaml
 #       - sam validate -t lambda1/template.yaml
 #       - sam validate -t lambda1/template-role.yaml
 #       - sam validate -t lambda1/template-layer.yaml
@@ -82,102 +78,111 @@
 #   build:
 #     commands:
 #       - . /tmp/build.env
-      
-#       # Deploy role only if template changed
+
+#       # Deploy role stack if needed
 #       - |
 #         if [ "$SKIP_ROLE_DEPLOY" != "true" ]; then
-#           echo "=== Deploying IAM Role and Policies ==="
+#           echo "=== Deploying ROLE stack ==="
 #           sam build --use-container --template-file lambda1/template-role.yaml
 #           sam package \
 #             --template-file .aws-sam/build/template.yaml \
-#             --s3-bucket $S3_BUCKET \
-#             --s3-prefix lambda1/role/$CODEBUILD_RESOLVED_SOURCE_VERSION \
+#             --s3-bucket "$S3_BUCKET" \
+#             --s3-prefix "lambda1/role/$CODEBUILD_RESOLVED_SOURCE_VERSION" \
 #             --output-template-file packaged-role.yaml \
-#             --region $AWS_REGION
-          
+#             --region "$AWS_REGION"
+
 #           sam deploy \
 #             --template-file packaged-role.yaml \
-#             --stack-name lambda1-role-${ENVIRONMENT} \
-#             --parameter-overrides Environment=${ENVIRONMENT} RoleHash=$ROLE_HASH \
+#             --stack-name "lambda1-role-${ENVIRONMENT}" \
+#             --parameter-overrides "Environment=$ENVIRONMENT" "RoleHash=$ROLE_HASH" \
 #             --capabilities CAPABILITY_NAMED_IAM \
-#             --region $AWS_REGION \
+#             --region "$AWS_REGION" \
 #             --no-fail-on-empty-changeset
-          
-#           echo "Role deployment complete"
 #         else
-#           echo "Skipping role deployment - template unchanged"
+#           echo "Skipping role deploy (no changes) ${ROLE_HASH}"
 #         fi
-      
-#       # Verify role export exists
+
+#       # Ensure role export exists (retry loop to avoid eventual consistency)
 #       - |
-#         echo "=== Verifying Role Export ==="
-#         ROLE_EXPORT=$(aws cloudformation list-exports \
-#           --region $AWS_REGION \
-#           --query "Exports[?Name=='lambda1-execution-role-arn-${ENVIRONMENT}'].ExportingStackId" \
-#           --output text 2>/dev/null || echo "none")
-#         echo "Role export status: $ROLE_EXPORT"
-#         if [ "$ROLE_EXPORT" = "none" ]; then
-#           echo "ERROR: Role export not found! Role stack may have failed to deploy."
+#         echo "=== Waiting for ROLE export to appear ==="
+#         for i in 1 2 3 4 5 6; do
+#           ROLE_EXPORT="$(aws cloudformation list-exports \
+#             --region "$AWS_REGION" \
+#             --query "Exports[?Name=='lambda1-execution-role-arn-${ENVIRONMENT}'].Name | [0]" \
+#             --output text 2>/dev/null || echo "none")"
+#           if [ "$ROLE_EXPORT" != "none" ] && [ "$ROLE_EXPORT" != "None" ]; then
+#             echo "Role export found."
+#             break
+#           fi
+#           echo "Role export not found yet (attempt $i) - sleeping 5s"
+#           sleep 5
+#         done
+#         if [ "$ROLE_EXPORT" = "none" ] || [ "$ROLE_EXPORT" = "None" ]; then
+#           echo "ERROR: Role export still not found."
 #           exit 1
 #         fi
-#         echo "Role export found"
-      
-#       # Deploy layer only if changed
+
+#       # Deploy layer stack if needed
 #       - |
 #         if [ "$SKIP_LAYER_DEPLOY" != "true" ]; then
-#           echo "=== Deploying Layer ==="
+#           echo "=== Deploying LAYER stack ==="
 #           sam build --use-container --template-file lambda1/template-layer.yaml
 #           sam package \
 #             --template-file .aws-sam/build/template.yaml \
-#             --s3-bucket $S3_BUCKET \
-#             --s3-prefix lambda1/layer/$CODEBUILD_RESOLVED_SOURCE_VERSION \
+#             --s3-bucket "$S3_BUCKET" \
+#             --s3-prefix "lambda1/layer/$CODEBUILD_RESOLVED_SOURCE_VERSION" \
 #             --output-template-file packaged-layer.yaml \
-#             --region $AWS_REGION
-          
+#             --region "$AWS_REGION"
+
 #           sam deploy \
 #             --template-file packaged-layer.yaml \
-#             --stack-name lambda1-layer-${ENVIRONMENT} \
-#             --parameter-overrides Environment=${ENVIRONMENT} LayerContentHash=$LAYER_HASH \
+#             --stack-name "lambda1-layer-${ENVIRONMENT}" \
+#             --parameter-overrides "Environment=$ENVIRONMENT" "LayerContentHash=$LAYER_HASH" \
 #             --capabilities CAPABILITY_NAMED_IAM \
-#             --region $AWS_REGION \
+#             --region "$AWS_REGION" \
 #             --no-fail-on-empty-changeset
-          
-#           echo "Layer deployment complete"
-#           sleep 5
-#           echo "Waiting for exports to be available..."
 #         else
-#           echo "Skipping layer deployment - requirements.txt unchanged"
+#           echo "Skipping layer deploy (requirements unchanged)"
 #         fi
-      
-#       # Verify layer export exists before deploying function
+
+#       # Ensure layer export exists (retry loop)
 #       - |
-#         echo "=== Verifying Layer Export ==="
-#         LAYER_EXPORT=$(aws cloudformation list-exports \
-#           --region $AWS_REGION \
-#           --query "Exports[?Name=='lambda1-deps-layer-arn-${ENVIRONMENT}'].ExportingStackId" \
-#           --output text 2>/dev/null || echo "none")
-#         echo "Layer export status: $LAYER_EXPORT"
-#         if [ "$LAYER_EXPORT" = "none" ]; then
-#           echo "ERROR: Layer export not found! Layer stack may have failed to deploy."
+#         echo "=== Waiting for LAYER export to appear ==="
+#         for i in 1 2 3 4 5 6; do
+#           LAYER_EXPORT="$(aws cloudformation list-exports \
+#             --region "$AWS_REGION" \
+#             --query "Exports[?Name=='lambda1-deps-layer-arn-${ENVIRONMENT}'].Name | [0]" \
+#             --output text 2>/dev/null || echo "none")"
+#           if [ "$LAYER_EXPORT" != "none" ] && [ "$LAYER_EXPORT" != "None" ]; then
+#             echo "Layer export found."
+#             break
+#           fi
+#           echo "Layer export not found yet (attempt $i) - sleeping 5s"
+#           sleep 5
+#         done
+#         if [ "$LAYER_EXPORT" = "none" ] || [ "$LAYER_EXPORT" = "None" ]; then
+#           echo "ERROR: Layer export still not found."
 #           exit 1
 #         fi
-#         echo "Layer export found, proceeding with function deployment"
-      
-#       # Always deploy function
-#       - echo "=== Building and Deploying Lambda Function ==="
-#       - sam build --use-container --template-file lambda1/template.yaml
-#       - |
-#         sam package \
-#           --template-file .aws-sam/build/template.yaml \
-#           --s3-bucket $S3_BUCKET \
-#           --s3-prefix lambda1/function/$CODEBUILD_RESOLVED_SOURCE_VERSION \
-#           --output-template-file packaged.yaml \
-#           --region $AWS_REGION
 
-#       - echo "==== packaged.yaml CodeUri S3 references ===="
-#       - grep -n "S3Bucket\\|S3Key\\|s3://" packaged.yaml || true
-#       - echo "==== List uploaded artifacts in S3 prefix ===="
-#       - aws s3 ls "s3://$S3_BUCKET/lambda1/function/$CODEBUILD_RESOLVED_SOURCE_VERSION/" --recursive || true
+#       # Deploy function stack ALWAYS
+#       - |
+#         echo "=== Deploying FUNCTION stack ==="
+#         sam build --use-container --template-file lambda1/template.yaml
+#         sam package \
+#         --template-file .aws-sam/build/template.yaml \
+#         --s3-bucket "$S3_BUCKET" \
+#         --s3-prefix "lambda1/function/$CODEBUILD_RESOLVED_SOURCE_VERSION" \
+#         --output-template-file packaged.yaml \
+#         --region "$AWS_REGION"
+
+#         sam deploy \
+#         --template-file packaged.yaml \
+#         --stack-name "lambda1-${ENVIRONMENT}" \
+#         --parameter-overrides "Environment=$ENVIRONMENT" \
+#         --capabilities CAPABILITY_IAM \
+#         --region "$AWS_REGION" \
+#         --no-fail-on-empty-changeset
 
 # artifacts:
 #   files:
@@ -190,33 +195,34 @@
 #     - "/root/.cache/pip/**/*"
 #     - ".aws-sam/**/*"
 
+
 version: 0.2
+
+env:
+  shell: bash
 
 phases:
   install:
     runtime-versions:
       python: 3.11
     commands:
+      - set -euo pipefail
       - python --version
       - pip install --upgrade pip
-      - pip install aws-sam-cli cfn-lint
+      - pip install aws-sam-cli
       - echo "ENVIRONMENT=$ENVIRONMENT"
       - echo "AWS_REGION=$AWS_REGION"
       - echo "S3_BUCKET=$S3_BUCKET"
 
   pre_build:
     commands:
-      # Hash layer requirements
+      - set -euo pipefail
+
+      # Hashes for change detection
       - LAYER_HASH=$(md5sum lambda1/layers/lib/requirements.txt | awk '{print $1}' | cut -c1-8)
-      - echo "LAYER_HASH=$LAYER_HASH"
-      - echo "LAYER_HASH=$LAYER_HASH" >> /tmp/build.env
-
-      # Hash role template
       - ROLE_HASH=$(md5sum lambda1/template-role.yaml | awk '{print $1}' | cut -c1-8)
-      - echo "ROLE_HASH=$ROLE_HASH"
-      - echo "ROLE_HASH=$ROLE_HASH" >> /tmp/build.env
 
-      # Decide if role deploy needed (based on existing role tag)
+      # Decide role deploy needed (based on IAM role tag)
       - |
         ROLE_NAME="lambda1-execution-role-${ENVIRONMENT}"
         EXISTING_ROLE_HASH="$(aws iam get-role \
@@ -224,14 +230,14 @@ phases:
           --query "Role.Tags[?Key=='RoleHash'].Value | [0]" \
           --output text 2>/dev/null || echo "none")"
 
-        echo "EXISTING_ROLE_HASH=$EXISTING_ROLE_HASH"
         if [ "$EXISTING_ROLE_HASH" = "$ROLE_HASH" ]; then
-          echo "SKIP_ROLE_DEPLOY=true" >> /tmp/build.env
+          SKIP_ROLE_DEPLOY=true
         else
-          echo "SKIP_ROLE_DEPLOY=false" >> /tmp/build.env
+          SKIP_ROLE_DEPLOY=false
         fi
+        echo "SKIP_ROLE_DEPLOY=$SKIP_ROLE_DEPLOY"
 
-      # Decide if layer deploy needed (compare stack parameter)
+      # Decide layer deploy needed (compare stack parameter)
       - |
         LAYER_STACK_NAME="lambda1-layer-${ENVIRONMENT}"
         STACK_EXISTS="$(aws cloudformation describe-stacks \
@@ -246,141 +252,130 @@ phases:
             --region "$AWS_REGION" \
             --query "Stacks[0].Parameters[?ParameterKey=='LayerContentHash'].ParameterValue | [0]" \
             --output text 2>/dev/null || echo "none")"
-          echo "EXISTING_LAYER_HASH=$EXISTING_LAYER_HASH"
           if [ "$EXISTING_LAYER_HASH" = "$LAYER_HASH" ]; then
-            echo "SKIP_LAYER_DEPLOY=true" >> /tmp/build.env
+            SKIP_LAYER_DEPLOY=true
           else
-            echo "SKIP_LAYER_DEPLOY=false" >> /tmp/build.env
+            SKIP_LAYER_DEPLOY=false
           fi
         else
-          echo "SKIP_LAYER_DEPLOY=false" >> /tmp/build.env
+          SKIP_LAYER_DEPLOY=false
         fi
+        echo "SKIP_LAYER_DEPLOY=$SKIP_LAYER_DEPLOY"
 
-      # Bundle shared into lambda1/
+      # Bundle shared/ into lambda1/
       - rm -rf lambda1/shared
       - mkdir -p lambda1/shared
       - rsync -a --delete shared/ lambda1/shared/
 
       # Validate templates
-      # - cfn-lint lambda1/template.yaml lambda1/template-role.yaml lambda1/template-layer.yaml
       - sam validate -t lambda1/template.yaml
       - sam validate -t lambda1/template-role.yaml
       - sam validate -t lambda1/template-layer.yaml
 
   build:
     commands:
-      - . /tmp/build.env
+      - set -euo pipefail
 
-      # Deploy role stack if needed
+      # -----------------------------
+      # TemplateConfiguration JSONs (CORRECT SYNTAX for CodePipeline CFN action)
+      # -----------------------------
+      - |
+        cat > role-config.json <<EOF
+{
+  "Parameters": {
+    "Environment": "$ENVIRONMENT",
+    "RoleHash": "$ROLE_HASH"
+  }
+}
+EOF
+
+      - |
+        cat > layer-config.json <<EOF
+{
+  "Parameters": {
+    "Environment": "$ENVIRONMENT",
+    "LayerContentHash": "$LAYER_HASH"
+  }
+}
+EOF
+
+      - |
+        cat > function-config.json <<EOF
+{
+  "Parameters": {
+    "Environment": "$ENVIRONMENT"
+  }
+}
+EOF
+
+      # -----------------------------
+      # ROLE template (conditional -> otherwise NO-OP template)
+      # Output: lambda1-role.yaml
+      # -----------------------------
       - |
         if [ "$SKIP_ROLE_DEPLOY" != "true" ]; then
-          echo "=== Deploying ROLE stack ==="
+          echo "=== BUILD/PACKAGE ROLE ==="
           sam build --use-container --template-file lambda1/template-role.yaml
           sam package \
             --template-file .aws-sam/build/template.yaml \
             --s3-bucket "$S3_BUCKET" \
             --s3-prefix "lambda1/role/$CODEBUILD_RESOLVED_SOURCE_VERSION" \
-            --output-template-file packaged-role.yaml \
+            --output-template-file lambda1-role.yaml \
             --region "$AWS_REGION"
-
-          sam deploy \
-            --template-file packaged-role.yaml \
-            --stack-name "lambda1-role-${ENVIRONMENT}" \
-            --parameter-overrides "Environment=$ENVIRONMENT" "RoleHash=$ROLE_HASH" \
-            --capabilities CAPABILITY_NAMED_IAM \
-            --region "$AWS_REGION" \
-            --no-fail-on-empty-changeset
         else
-          echo "Skipping role deploy (no changes) ${ROLE_HASH}"
+          echo "=== ROLE unchanged -> writing NO-OP lambda1-role.yaml ==="
+          cat > lambda1-role.yaml <<'EOF'
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'No-op role deploy (skipped)'
+Resources: {}
+EOF
         fi
 
-      # Ensure role export exists (retry loop to avoid eventual consistency)
-      - |
-        echo "=== Waiting for ROLE export to appear ==="
-        for i in 1 2 3 4 5 6; do
-          ROLE_EXPORT="$(aws cloudformation list-exports \
-            --region "$AWS_REGION" \
-            --query "Exports[?Name=='lambda1-execution-role-arn-${ENVIRONMENT}'].Name | [0]" \
-            --output text 2>/dev/null || echo "none")"
-          if [ "$ROLE_EXPORT" != "none" ] && [ "$ROLE_EXPORT" != "None" ]; then
-            echo "Role export found."
-            break
-          fi
-          echo "Role export not found yet (attempt $i) - sleeping 5s"
-          sleep 5
-        done
-        if [ "$ROLE_EXPORT" = "none" ] || [ "$ROLE_EXPORT" = "None" ]; then
-          echo "ERROR: Role export still not found."
-          exit 1
-        fi
-
-      # Deploy layer stack if needed
+      # -----------------------------
+      # LAYER template (conditional -> otherwise NO-OP template)
+      # Output: lambda1-layer.yaml
+      # -----------------------------
       - |
         if [ "$SKIP_LAYER_DEPLOY" != "true" ]; then
-          echo "=== Deploying LAYER stack ==="
+          echo "=== BUILD/PACKAGE LAYER ==="
           sam build --use-container --template-file lambda1/template-layer.yaml
           sam package \
             --template-file .aws-sam/build/template.yaml \
             --s3-bucket "$S3_BUCKET" \
             --s3-prefix "lambda1/layer/$CODEBUILD_RESOLVED_SOURCE_VERSION" \
-            --output-template-file packaged-layer.yaml \
+            --output-template-file lambda1-layer.yaml \
             --region "$AWS_REGION"
-
-          sam deploy \
-            --template-file packaged-layer.yaml \
-            --stack-name "lambda1-layer-${ENVIRONMENT}" \
-            --parameter-overrides "Environment=$ENVIRONMENT" "LayerContentHash=$LAYER_HASH" \
-            --capabilities CAPABILITY_NAMED_IAM \
-            --region "$AWS_REGION" \
-            --no-fail-on-empty-changeset
         else
-          echo "Skipping layer deploy (requirements unchanged)"
+          echo "=== LAYER unchanged -> writing NO-OP lambda1-layer.yaml ==="
+          cat > lambda1-layer.yaml <<'EOF'
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'No-op layer deploy (skipped)'
+Resources: {}
+EOF
         fi
 
-      # Ensure layer export exists (retry loop)
+      # -----------------------------
+      # FUNCTION template ALWAYS
+      # Output: lambda1-package.yaml
+      # -----------------------------
       - |
-        echo "=== Waiting for LAYER export to appear ==="
-        for i in 1 2 3 4 5 6; do
-          LAYER_EXPORT="$(aws cloudformation list-exports \
-            --region "$AWS_REGION" \
-            --query "Exports[?Name=='lambda1-deps-layer-arn-${ENVIRONMENT}'].Name | [0]" \
-            --output text 2>/dev/null || echo "none")"
-          if [ "$LAYER_EXPORT" != "none" ] && [ "$LAYER_EXPORT" != "None" ]; then
-            echo "Layer export found."
-            break
-          fi
-          echo "Layer export not found yet (attempt $i) - sleeping 5s"
-          sleep 5
-        done
-        if [ "$LAYER_EXPORT" = "none" ] || [ "$LAYER_EXPORT" = "None" ]; then
-          echo "ERROR: Layer export still not found."
-          exit 1
-        fi
-
-      # Deploy function stack ALWAYS
-      - |
-        echo "=== Deploying FUNCTION stack ==="
+        echo "=== BUILD/PACKAGE FUNCTION (ALWAYS) ==="
         sam build --use-container --template-file lambda1/template.yaml
         sam package \
-        --template-file .aws-sam/build/template.yaml \
-        --s3-bucket "$S3_BUCKET" \
-        --s3-prefix "lambda1/function/$CODEBUILD_RESOLVED_SOURCE_VERSION" \
-        --output-template-file packaged.yaml \
-        --region "$AWS_REGION"
-
-        sam deploy \
-        --template-file packaged.yaml \
-        --stack-name "lambda1-${ENVIRONMENT}" \
-        --parameter-overrides "Environment=$ENVIRONMENT" \
-        --capabilities CAPABILITY_IAM \
-        --region "$AWS_REGION" \
-        --no-fail-on-empty-changeset
+          --template-file .aws-sam/build/template.yaml \
+          --s3-bucket "$S3_BUCKET" \
+          --s3-prefix "lambda1/function/$CODEBUILD_RESOLVED_SOURCE_VERSION" \
+          --output-template-file lambda1-package.yaml \
+          --region "$AWS_REGION"
 
 artifacts:
   files:
-    - packaged.yaml
-    - packaged-role.yaml
-    - packaged-layer.yaml
+    - lambda1-package.yaml
+    - lambda1-role.yaml
+    - lambda1-layer.yaml
+    - role-config.json
+    - layer-config.json
+    - function-config.json
 
 cache:
   paths:
