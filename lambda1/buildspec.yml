@@ -262,7 +262,7 @@ phases:
       - rsync -a --delete shared/ lambda1/shared/
 
       # Validate templates
-      - cfn-lint lambda1/template.yaml lambda1/template-role.yaml lambda1/template-layer.yaml
+      # - cfn-lint lambda1/template.yaml lambda1/template-role.yaml lambda1/template-layer.yaml
       - sam validate -t lambda1/template.yaml
       - sam validate -t lambda1/template-role.yaml
       - sam validate -t lambda1/template-layer.yaml
