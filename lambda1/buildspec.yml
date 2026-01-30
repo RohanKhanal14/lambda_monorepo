@@ -23,7 +23,7 @@ phases:
   build:
     commands:
       # Build (this will also build the layer by running pip on layers/lib/requirements.txt)
-      - sam build --use-container --template-file lambda1/template.yaml
+      - sam build --cached --use-container --template-file lambda1/template.yaml
 
       # Package
       - sam package
