@@ -18,7 +18,7 @@ phases:
       
       # 2) Generate hash of role template
       - ROLE_HASH=$(md5sum lambda1/template-role.yaml | awk '{print $1}' | cut -c1-8)
-      - echo "Role Hash: $ROLE_HASH"
+      - echo "Role Hash=$ROLE_HASH"
       - echo "ROLE_HASH=$ROLE_HASH" >> /tmp/build.env
       
       # 3) Check if role has changed (by comparing tags)
