@@ -11,36 +11,132 @@ phases:
 
   pre_build:
     commands:
-      # 1) Bundle shared code into lambda folder (so CodeUri: . includes it)
+      # 1) Generate hash of layer requirements.txt
+      - LAYER_HASH=$(md5sum lambda1/layers/lib/requirements.txt | awk '{print $1}' | cut -c1-8)
+      - echo "Layer Hash: $LAYER_HASH"
+      - echo "LAYER_HASH=$LAYER_HASH" >> /tmp/build.env
+      
+      # 2) Generate hash of role template
+      - ROLE_HASH=$(md5sum lambda1/template-role.yaml | awk '{print $1}' | cut -c1-8)
+      - echo "Role Hash: $ROLE_HASH"
+      - echo "ROLE_HASH=$ROLE_HASH" >> /tmp/build.env
+      
+      # 3) Check if role has changed (by comparing tags)
+      - |
+        ROLE_NAME="lambda1-execution-role-${ENVIRONMENT}"
+        EXISTING_ROLE_HASH=$(aws iam get-role \
+          --role-name $ROLE_NAME \
+          --query "Role.Tags[?Key=='RoleHash'].Value" \
+          --output text 2>/dev/null || echo "none")
+        echo "Existing role hash: $EXISTING_ROLE_HASH"
+        if [ "$EXISTING_ROLE_HASH" == "$ROLE_HASH" ]; then
+          echo "SKIP_ROLE_DEPLOY=true" >> /tmp/build.env
+          echo "Role unchanged, skipping role deployment"
+        else
+          echo "SKIP_ROLE_DEPLOY=false" >> /tmp/build.env
+          echo "Role changed, will deploy role"
+        fi
+      
+      # 4) Check if layer already exists with this hash
+      - |
+        LAYER_EXISTS=$(aws lambda list-layer-versions \
+          --layer-name "lambda1-deps-${ENVIRONMENT}-${LAYER_HASH}" \
+          --query "LayerVersions[0].Version" \
+          --output text 2>/dev/null || echo "none")
+        echo "Layer status: $LAYER_EXISTS"
+        if [ "$LAYER_EXISTS" != "none" ]; then
+          echo "SKIP_LAYER_DEPLOY=true" >> /tmp/build.env
+          echo "Layer already exists, skipping layer deployment"
+        else
+          echo "SKIP_LAYER_DEPLOY=false" >> /tmp/build.env
+          echo "Layer not found, will deploy layer"
+        fi
+
+      # 5) Bundle shared code into lambda folder
       - rm -rf lambda1/shared
       - mkdir -p lambda1/shared
       - rsync -a --delete shared/ lambda1/shared/
 
-      # 2) Lint/validate
-      - cfn-lint lambda1/template.yaml
+      # 6) Lint/validate all templates
+      - cfn-lint lambda1/template.yaml lambda1/template-role.yaml lambda1/template-layer.yaml
       - sam validate -t lambda1/template.yaml
+      - sam validate -t lambda1/template-role.yaml
+      - sam validate -t lambda1/template-layer.yaml
 
   build:
     commands:
-      # Build (this will also build the layer by running pip on layers/lib/requirements.txt)
+      - source /tmp/build.env
+      
+      # Deploy role only if template changed
+      - |
+        if [ "$SKIP_ROLE_DEPLOY" != "true" ]; then
+          echo "=== Deploying IAM Role and Policies ==="
+          sam build --use-container --template-file lambda1/template-role.yaml
+          sam package \
+            --template-file .aws-sam/build/template.yaml \
+            --s3-bucket $S3_BUCKET \
+            --s3-prefix lambda1/role/$CODEBUILD_RESOLVED_SOURCE_VERSION \
+            --output-template-file packaged-role.yaml \
+            --region $AWS_REGION
+          
+          sam deploy \
+            --template-file packaged-role.yaml \
+            --stack-name lambda1-role-${ENVIRONMENT} \
+            --parameter-overrides Environment=${ENVIRONMENT} RoleHash=$ROLE_HASH \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --region $AWS_REGION \
+            --no-fail-on-empty-changeset
+          
+          echo "Role deployment complete"
+        else
+          echo "Skipping role deployment - template unchanged"
+        fi
+      
+      # Deploy layer only if changed
+      - |
+        if [ "$SKIP_LAYER_DEPLOY" != "true" ]; then
+          echo "=== Deploying Layer ==="
+          sam build --use-container --template-file lambda1/template-layer.yaml
+          sam package \
+            --template-file .aws-sam/build/template.yaml \
+            --s3-bucket $S3_BUCKET \
+            --s3-prefix lambda1/layer/$CODEBUILD_RESOLVED_SOURCE_VERSION \
+            --output-template-file packaged-layer.yaml \
+            --region $AWS_REGION
+          
+          sam deploy \
+            --template-file packaged-layer.yaml \
+            --stack-name lambda1-layer-${ENVIRONMENT} \
+            --parameter-overrides Environment=${ENVIRONMENT} LayerContentHash=$LAYER_HASH \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --region $AWS_REGION \
+            --no-fail-on-empty-changeset
+          
+          echo "Layer deployment complete"
+        else
+          echo "Skipping layer deployment - requirements.txt unchanged"
+        fi
+      
+      # Always deploy function
+      - echo "=== Building and Deploying Lambda Function ==="
       - sam build --use-container --template-file lambda1/template.yaml
-
-      # Package
-      - sam package
-        --template-file .aws-sam/build/template.yaml
-        --s3-bucket $S3_BUCKET
-        --s3-prefix lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION
-        --output-template-file packaged.yaml
-        --region $AWS_REGION
+      - sam package \
+          --template-file .aws-sam/build/template.yaml \
+          --s3-bucket $S3_BUCKET \
+          --s3-prefix lambda1/function/$CODEBUILD_RESOLVED_SOURCE_VERSION \
+          --output-template-file packaged.yaml \
+          --region $AWS_REGION
 
       - echo "==== packaged.yaml CodeUri S3 references ===="
-      - grep -n "S3Bucket\\|S3Key\\|s3://" -n packaged.yaml || true
+      - grep -n "S3Bucket\\|S3Key\\|s3://" packaged.yaml || true
       - echo "==== List uploaded artifacts in S3 prefix ===="
-      - aws s3 ls "s3://$S3_BUCKET/lambda1/$CODEBUILD_RESOLVED_SOURCE_VERSION/" --recursive || true
+      - aws s3 ls "s3://$S3_BUCKET/lambda1/function/$CODEBUILD_RESOLVED_SOURCE_VERSION/" --recursive || true
 
 artifacts:
   files:
     - packaged.yaml
+    - packaged-role.yaml
+    - packaged-layer.yaml
 
 cache:
   paths:

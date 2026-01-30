@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Lambda1 Dependency Layer
+
+Parameters:
+  Environment:
+    Type: String
+    Default: Development
+    AllowedValues:
+      - Development
+      - Staging
+      - Production
+  LayerContentHash:
+    Type: String
+    Description: MD5 hash of layer requirements.txt
+
+Resources:
+  Lambda1DepsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub "lambda1-deps-${Environment}-${LayerContentHash}"
+      Description: !Sub "Lambda1 dependencies - hash:${LayerContentHash}"
+      ContentUri: layers/lib
+      CompatibleRuntimes:
+        - python3.11
+      RetentionPolicy: Retain
+    Metadata:
+      BuildMethod: python3.11
+    Tags:
+      Environment: !Ref Environment
+      Purpose: test
+      Owner: rohan.khanal
+      Project: GUMP_NOW
+      Name: !Sub "lambda1-deps-${Environment}"
+
+Outputs:
+  DepsLayerArn:
+    Value: !Ref Lambda1DepsLayer
+    Export:
+      Name: !Sub "lambda1-deps-layer-arn-${Environment}"
