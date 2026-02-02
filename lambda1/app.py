@@ -13,7 +13,7 @@ def lambda_handler(event, context):
     return {
         'statusCode': 200,
         'body': json.dumps({
-            'message': 'Hello from test for webhook! code test version this si branch test 2 for',
+            'message': 'Hello from test for stage pipeline trigger!',
             'http_status': response.status_code,
             'lambda': 'lambda1'
         })
