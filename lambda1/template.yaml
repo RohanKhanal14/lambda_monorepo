@@ -77,6 +77,7 @@
 #   Lambda1DepsLayerArn:
 #     Value: !Ref Lambda1DepsLayer
 
+
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: Lambda1 stack (SAM) - monorepo
@@ -127,75 +128,65 @@ Resources:
       Project: GUMP_NOW
       Name: !Sub "lambda1-deps-${Environment}"
 
-  # Log group created explicitly (retention controlled by CFN)
   Lambda1LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/lambda/lambda1-${Environment}"
       RetentionInDays: 7
 
-  # Explicit IAM role for Lambda1
+  # ✅ Explicit IAM role for Lambda1 (FIXED indentation)
   Lambda1ExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub "lambda1-execution-role-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
 
-    AssumeRolePolicyDocument:
-      Version: "2012-10-17"
-      Statement:
-        - Effect: Allow
-          Principal:
-            Service: lambda.amazonaws.com
-          Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub "lambda1-logs-${Environment}"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: AllowWriteLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/lambda1-${Environment}:*"
 
-    Policies:
-      # =========================
-      # CloudWatch Logs policy
-      # =========================
-      - PolicyName: !Sub "lambda1-logs-${Environment}"
-        PolicyDocument:
-          Version: "2012-10-17"
-          Statement:
-            - Sid: AllowWriteLogs
-              Effect: Allow
-              Action:
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource:
-                - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/lambda1-${Environment}:*"
+              # Optional (safe fallback)
+              - Sid: OptionalCreateLogGroup
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
 
-            # Optional (safe fallback)
-            - Sid: OptionalCreateLogGroup
-              Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-              Resource:
-                - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+        - PolicyName: !Sub "lambda1-s3-${Environment}"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: AllowListBucket
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::lambda1-artifacts-${Environment}"
 
-      # =========================
-      # S3 access policy
-      # =========================
-      - PolicyName: !Sub "lambda1-s3-${Environment}"
-        PolicyDocument:
-          Version: "2012-10-17"
-          Statement:
-            # Bucket-level permissions
-            - Sid: AllowListBucket
-              Effect: Allow
-              Action:
-                - s3:ListBucket
-              Resource:
-                - !Sub "arn:aws:s3:::lambda1-artifacts-${Environment}"
-
-            # Object-level permissions
-            - Sid: AllowObjectReadWrite
-              Effect: Allow
-              Action:
-                - s3:GetObject
-                - s3:PutObject
-                - s3:DeleteObject
-              Resource:
-                - !Sub "arn:aws:s3:::lambda1-artifacts-${Environment}/*"
+              - Sid: AllowObjectReadWrite
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub "arn:aws:s3:::lambda1-artifacts-${Environment}/*"
 
   Lambda1Function:
     Type: AWS::Serverless::Function
@@ -205,10 +196,7 @@ Resources:
       Handler: app.lambda_handler
       Layers:
         - !Ref Lambda1DepsLayer
-
-      # ✅ Attach the explicit role
       Role: !GetAtt Lambda1ExecutionRole.Arn
-
       Tags:
         Name: !Sub "lambda1-${Environment}"
         Environment: !Ref Environment
