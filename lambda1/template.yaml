@@ -77,7 +77,6 @@
 #   Lambda1DepsLayerArn:
 #     Value: !Ref Lambda1DepsLayer
 
-
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: Lambda1 stack (SAM) - monorepo
@@ -136,10 +135,10 @@ Resources:
       RetentionInDays: 7
 
   # Explicit IAM role for Lambda1
- Lambda1ExecutionRole:
-  Type: AWS::IAM::Role
-  Properties:
-    RoleName: !Sub "lambda1-execution-role-${Environment}"
+  Lambda1ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "lambda1-execution-role-${Environment}"
 
     AssumeRolePolicyDocument:
       Version: "2012-10-17"
